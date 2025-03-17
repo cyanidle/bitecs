@@ -1,73 +1,84 @@
 ﻿#pragma once
 
-#include "bitecs_core.h"
+#include <cstdint>
+#include <cstddef>
+#include <array>
 #include <bit>
 #include <cassert>
 #include <climits>
+#include <cstdint>
+#include <initializer_list>
 
 namespace bitecs
 {
 
-constexpr int groupSize = 4;
-constexpr int groupMask = 0xf;
+using mask_t = __uint128_t;
 
-struct SparseBitMap
+struct alignas(mask_t) SparseBitMap
 {
-    // max total components: 128
-    // components in single query: [8 - 32]
-    // 4x compression ratio
-    uint32_t dict; //32 groups by 4 bits
-    uint32_t bits; //8 groups of 4 (out of 32)
+    uint32_t dict; // which groups of 16 are active out of 32 total
+    uint16_t bits[6];
+
+    mask_t as_mask() const noexcept {
+        return *reinterpret_cast<const mask_t*>(this);
+    }
+    static SparseBitMap from_mask(mask_t mask) noexcept {
+        return *reinterpret_cast<SparseBitMap*>(&mask);
+    }
 };
 
+struct Ranks {
+    uint8_t ranks[6];
+    int popcount;
+};
 
-inline bool matches(uint32_t queryDict, uint32_t query, uint32_t compDict, uint32_t comps)
-{
-    assert((compDict & queryDict) == queryDict && "query must be compatible");
-    if (queryDict == compDict) {
-        return (query & comps) == query;
-    } else {
-        while(queryDict) {
-            if (compDict & 1) {
-                if (queryDict & 1) {
-                    auto qmask = query & groupMask;
-                    auto cmask = comps & groupMask;
-                    if ((qmask & cmask) != qmask) {
-                        return false;
-                    }
-                    query >>= groupSize;
-                }
-                comps >>= groupSize;
-            }
-            queryDict >>= 1;
-            compDict >>= 1;
+constexpr Ranks get_ranks(uint32_t dict) {
+    Ranks res{};
+    int out = 0;
+    while(dict) {
+        if (dict & 1) {
+            res.ranks[res.popcount++] = out;
         }
-        return true;
+        dict >>= 1;
+        out++;
     }
+    return res;
 }
 
-inline size_t first_match(SparseBitMap query, const SparseBitMap* components, size_t count)
-{
-    for (size_t idx = 0; idx < count; ++idx) {
-        const auto& comp = components[idx];
-        if ((comp.dict & query.dict) == query.dict && matches(query.dict, query.bits, comp.dict, comp.bits)) {
-            return idx;
-        }
-    }
-    return count;
+constexpr mask_t fill_up_to(int bit) {
+    return (mask_t(1) << bit) - mask_t(1);
 }
 
-inline size_t first_miss(SparseBitMap query, const SparseBitMap* components, size_t count)
-{
-    for (size_t idx = 0; idx < count; ++idx) {
-        const auto& comp = components[idx];
-        if ((comp.dict & query.dict) != query.dict || !matches(query.dict, query.bits, comp.dict, comp.bits)) {
-            return idx;
-        } else if (comp.dict != query.dict) {
-            // todo: optimize query for current component here
-        }
-    }
-    return count;
+inline mask_t relocate_part(uint32_t dictDiff, mask_t mask, int index, const uint8_t* __restrict qranks) {
+    int rank = qranks[index];
+    int select_mask = fill_up_to(rank);
+    int shift = std::popcount(dictDiff & select_mask) * 16;
+    int value_mask_offset = (2/*adjust for dict*/ + index) * 16;
+    mask_t value_mask = mask_t(0xff'ff) << value_mask_offset;
+    mask_t value = mask & value_mask;
+    // todo: fix value select!
+    return value << shift;
+}
+
+inline mask_t adjust_for(uint32_t dict, mask_t mask, const uint8_t* __restrict qranks) {
+    mask_t rdict = mask & mask_t(0xff'ff'ff'ff);
+    uint32_t dictDiff = dict ^ rdict;
+    mask_t r0 = relocate_part(dictDiff, mask, 0, qranks);
+    mask_t r1 = relocate_part(dictDiff, mask, 1, qranks);
+    mask_t r2 = relocate_part(dictDiff, mask, 2, qranks);
+    mask_t r3 = relocate_part(dictDiff, mask, 3, qranks);
+    mask_t r4 = relocate_part(dictDiff, mask, 4, qranks);
+    mask_t r5 = relocate_part(dictDiff, mask, 5, qranks);
+    return rdict | r0 | r1 | r2 | r3 | r4 | r5;
+}
+
+void test() {
+    SparseBitMap map{0b11100, {1, 3, 7}};
+    Ranks ranks = get_ranks(map.dict);
+    auto mask = map.as_mask();
+    auto m = mask & mask_t(0xff'ff'ff'ff);
+    mask = adjust_for(0b11111, mask, ranks.ranks);
+    SparseBitMap result = SparseBitMap::from_mask(mask);
 }
 
 }
