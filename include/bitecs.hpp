@@ -56,7 +56,6 @@ inline mask_t relocate_part(uint32_t dictDiff, mask_t mask, int index, const uin
     int value_mask_offset = (2/*adjust for dict*/ + index) * 16;
     mask_t value_mask = mask_t(0xff'ff) << value_mask_offset;
     mask_t value = mask & value_mask;
-    // todo: fix value select!
     return value << shift;
 }
 
@@ -73,12 +72,10 @@ inline mask_t adjust_for(uint32_t dict, mask_t mask, const uint8_t* __restrict q
 }
 
 void test() {
-    SparseBitMap map{0b11100, {1, 3, 7}};
+    SparseBitMap map{0b10100, {1, 3}};
     Ranks ranks = get_ranks(map.dict);
-    auto mask = map.as_mask();
-    auto m = mask & mask_t(0xff'ff'ff'ff);
-    mask = adjust_for(0b11111, mask, ranks.ranks);
-    SparseBitMap result = SparseBitMap::from_mask(mask);
+    auto result_mask = adjust_for(0b11111, map.as_mask(), ranks.ranks);
+    SparseBitMap result = SparseBitMap::from_mask(result_mask);
 }
 
 }
