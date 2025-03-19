@@ -126,7 +126,10 @@ bool bitecs_mask_get(int index, const bitecs_SparseMask* mask)
     int bit = index & fill_up_to(BITECS_GROUP_SHIFT);
     int groupIndex = __builtin_popcount(mask->dict & fill_up_to(group));
     int shift = groupIndex * BITECS_GROUP_SIZE + bit;
-    return mask->bits & (bitecs_dict_t)1 << shift;
+    bitecs_dict_t temp_dict = (bitecs_dict_t)1 << group;
+    bool dict_match = mask->dict & temp_dict;
+    bool bits_match = mask->bits & (mask_t)1 << shift;
+    return dict_match && bits_match;
 }
 
 bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, int *idxs, int idxs_count)
@@ -295,5 +298,5 @@ bool bitecs_entt_create(
 
 void _bitecs_sanity_test(bitecs_SparseMask *out)
 {
-    *(mask_t*)out = (mask_t)1 << 95;
+    out->bits = (mask_t)1 << 95;
 }
