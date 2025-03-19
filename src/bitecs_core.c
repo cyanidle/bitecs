@@ -144,44 +144,36 @@ bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, int *idxs, int idxs_coun
         }
     }
 #endif
-    int groups[BITECS_GROUPS_COUNT] = {0};
-    bitecs_dict_t masks[BITECS_GROUPS_COUNT] = {0};
+    maskOut->dict = 0;
+    maskOut->bits = 0;
     if (!idxs_count) {
         return false;
     }
     { // first bit
-        groups[0] = idxs[0] >> BITECS_GROUP_SHIFT;
-        if (unlikely(groups[0] > BITECS_GROUPS_COUNT)) {
+        int group = idxs[0] >> BITECS_GROUP_SHIFT;
+        if (unlikely(group > BITECS_GROUP_SIZE)) {
             return false;
         }
         int bit = idxs[0] & fill_up_to(BITECS_GROUP_SHIFT);
-        masks[0] |= (bitecs_dict_t)1 << bit;
+        maskOut->dict |= (bitecs_dict_t)1 << group;
+        maskOut->bits |= (mask_t)1 << bit;
     }
-    int ngroup = 0;
     for (int i = 1; i < idxs_count; ++i) {
         int value = idxs[i];
         int group = value >> BITECS_GROUP_SHIFT;
         if (unlikely(group > BITECS_GROUP_SIZE)) {
             return false;
         }
-        int bit = value & fill_up_to(BITECS_GROUP_SHIFT);
-        if (group != groups[ngroup]) {
-            ngroup++;
-            if (unlikely(ngroup == BITECS_GROUPS_COUNT)) {
-                return false;
-            }
-            groups[ngroup] = group;
+        bitecs_dict_t newDict = maskOut->dict | (bitecs_dict_t)1 << group;
+        int groupIndex = __builtin_popcount(newDict) - 1;
+        if (unlikely(groupIndex == BITECS_GROUPS_COUNT)) {
+            return false;
         }
-        masks[ngroup] |= (bitecs_dict_t)1 << bit;
+        maskOut->dict = newDict;
+        int bit = value & fill_up_to(BITECS_GROUP_SHIFT);
+        int shift = groupIndex * BITECS_GROUP_SIZE + bit;
+        maskOut->bits |= (bitecs_mask_t)1 << shift;
     }
-    maskOut->bits = (mask_t)masks[0];
-    maskOut->bits |= (mask_t)masks[1] << BITECS_GROUP_SIZE;
-    maskOut->bits |= (mask_t)masks[2] << BITECS_GROUP_SIZE * 2;
-    maskOut->bits |= (mask_t)masks[3] << BITECS_GROUP_SIZE * 3;
-    maskOut->dict = (!groups[0] ? 0 : (bitecs_dict_t)1 << groups[0]);
-    maskOut->dict |= (!groups[1] ? 0 : (bitecs_dict_t)1 << groups[1]);
-    maskOut->dict |= (!groups[2] ? 0 : (bitecs_dict_t)1 << groups[2]);
-    maskOut->dict |= (!groups[3] ? 0 : (bitecs_dict_t)1 << groups[3]);
     return true;
 }
 
