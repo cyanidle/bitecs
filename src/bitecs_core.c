@@ -135,51 +135,54 @@ bool bitecs_mask_get(int index, const bitecs_SparseMask* mask)
 bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, int *idxs, int idxs_count)
 {
 #ifndef NDEBUG
-    int last = 0;
-    for (int i = 0; i < idxs_count; ++i) {
-        assert(idxs[i] > 0);
-        if (last < idxs[i]) {
-            last = idxs[i];
+    {
+        int _last = 0;
+        for (int i = 0; i < idxs_count; ++i) {
+            assert(idxs[i] > 0 && "bitecs_mask_from_array(): Invalid input");
+            assert(_last <= idxs[i] && "bitecs_mask_from_array(): Unsorted input");
+            _last = idxs[i];
         }
     }
 #endif
     int groups[BITECS_GROUPS_COUNT] = {0};
+    bitecs_dict_t masks[BITECS_GROUPS_COUNT] = {0};
     if (!idxs_count) {
-        goto err;
+        return false;
     }
-    groups[0] = idxs[0] >> BITECS_GROUP_SHIFT;
-    if (unlikely(groups[0] > BITECS_GROUPS_COUNT)) {
-        goto err;
+    { // first bit
+        groups[0] = idxs[0] >> BITECS_GROUP_SHIFT;
+        if (unlikely(groups[0] > BITECS_GROUPS_COUNT)) {
+            return false;
+        }
+        int bit = idxs[0] & fill_up_to(BITECS_GROUP_SHIFT);
+        masks[0] |= (bitecs_dict_t)1 << bit;
     }
     int ngroup = 0;
-    uint32_t masks[BITECS_GROUPS_COUNT] = {0};
-    for (int i = 0; i < idxs_count; ++i) {
+    for (int i = 1; i < idxs_count; ++i) {
         int value = idxs[i];
         int group = value >> BITECS_GROUP_SHIFT;
         if (unlikely(group > BITECS_GROUP_SIZE)) {
-            goto err;
+            return false;
         }
         int bit = value & fill_up_to(BITECS_GROUP_SHIFT);
         if (group != groups[ngroup]) {
             ngroup++;
             if (unlikely(ngroup == BITECS_GROUPS_COUNT)) {
-                goto err;
+                return false;
             }
+            groups[ngroup] = group;
         }
-        groups[ngroup] = group;
-        masks[ngroup] |= (uint32_t)1 << bit;
+        masks[ngroup] |= (bitecs_dict_t)1 << bit;
     }
-    maskOut->bits = (mask_t)masks[0]
-               | (mask_t)masks[1] << BITECS_GROUP_SIZE
-               | (mask_t)masks[2] << BITECS_GROUP_SIZE * 1
-               | (mask_t)masks[3] << BITECS_GROUP_SIZE * 2;
-    maskOut->dict = (uint32_t)1 << groups[0]
-             | (uint32_t)1 << groups[1]
-             | (uint32_t)1 << groups[2]
-             | (uint32_t)1 << groups[3];
+    maskOut->bits = (mask_t)masks[0];
+    maskOut->bits |= (mask_t)masks[1] << BITECS_GROUP_SIZE;
+    maskOut->bits |= (mask_t)masks[2] << BITECS_GROUP_SIZE * 2;
+    maskOut->bits |= (mask_t)masks[3] << BITECS_GROUP_SIZE * 3;
+    maskOut->dict = (!groups[0] ? 0 : (bitecs_dict_t)1 << groups[0]);
+    maskOut->dict |= (!groups[1] ? 0 : (bitecs_dict_t)1 << groups[1]);
+    maskOut->dict |= (!groups[2] ? 0 : (bitecs_dict_t)1 << groups[2]);
+    maskOut->dict |= (!groups[3] ? 0 : (bitecs_dict_t)1 << groups[3]);
     return true;
-err:
-    return false;
 }
 
 typedef struct component_list

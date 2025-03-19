@@ -1,5 +1,9 @@
 ﻿#pragma once
 
+#if !defined(DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN) && !defined(DOCTEST_CONFIG_IMPLEMENT)
+#define DOCTEST_CONFIG_DISABLE
+#endif
+
 #include <cstdint>
 #include <cstddef>
 #include <array>
@@ -58,15 +62,15 @@ TEST_CASE("Basic Mask Operations")
         int init[] = {100, 101, 120, 200, 202, 204, 600};
         bitecs_SparseMask mask;
         bitecs_mask_from_array(&mask, init, std::size(init));
-        auto a5 = bitecs_mask_get(100, &mask);
-        auto a6 = bitecs_mask_get(101, &mask);
-        auto a7 = bitecs_mask_get(102, &mask);
-        auto a8 = bitecs_mask_get(120, &mask);
-        auto a9 = bitecs_mask_get(200, &mask);
-        auto a10 = bitecs_mask_get(202, &mask);
-        auto a11 = bitecs_mask_get(203, &mask);
-        auto a12 = bitecs_mask_get(204, &mask);
-        auto a13 = bitecs_mask_get(600, &mask);
+        CHECK(bitecs_mask_get(100, &mask) == true);
+        CHECK(bitecs_mask_get(101, &mask) == true);
+        CHECK(bitecs_mask_get(102, &mask) == false);
+        CHECK(bitecs_mask_get(120, &mask) == true);
+        CHECK(bitecs_mask_get(200, &mask) == true);
+        CHECK(bitecs_mask_get(202, &mask) == true);
+        CHECK(bitecs_mask_get(203, &mask) == false);
+        CHECK(bitecs_mask_get(204, &mask) == true);
+        CHECK(bitecs_mask_get(600, &mask) == true);
     }
 }
 
