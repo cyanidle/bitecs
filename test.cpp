@@ -1,9 +1,2 @@
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "bitecs.hpp"
-
-
-
-int main(int argc, char *argv[])
-{
-    bitecs::test();
-    return 0;
-}
