@@ -146,19 +146,7 @@ bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, int *idxs, int idxs_coun
 #endif
     maskOut->dict = 0;
     maskOut->bits = 0;
-    if (!idxs_count) {
-        return false;
-    }
-    { // first bit
-        int group = idxs[0] >> BITECS_GROUP_SHIFT;
-        if (unlikely(group > BITECS_GROUP_SIZE)) {
-            return false;
-        }
-        int bit = idxs[0] & fill_up_to(BITECS_GROUP_SHIFT);
-        maskOut->dict |= (bitecs_dict_t)1 << group;
-        maskOut->bits |= (mask_t)1 << bit;
-    }
-    for (int i = 1; i < idxs_count; ++i) {
+    for (int i = 0; i < idxs_count; ++i) {
         int value = idxs[i];
         int group = value >> BITECS_GROUP_SHIFT;
         if (unlikely(group > BITECS_GROUP_SIZE)) {
