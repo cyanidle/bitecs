@@ -41,8 +41,7 @@ static mask_t relocate_part(bitecs_dict_t dictDiff, mask_t mask, int index, cons
     return value << shift;
 }
 
-static mask_t adjust_for(bitecs_dict_t dict, bitecs_dict_t qdict, mask_t qmask, const bitecs_dict_t* restrict rankMasks) {
-    bitecs_dict_t diff = dict ^ qdict;
+static mask_t adjust_for(bitecs_dict_t diff, mask_t qmask, const bitecs_dict_t* restrict rankMasks) {
     mask_t r0 = relocate_part(diff, qmask, 0, rankMasks);
     mask_t r1 = relocate_part(diff, qmask, 1, rankMasks);
     mask_t r2 = relocate_part(diff, qmask, 2, rankMasks);
@@ -50,9 +49,8 @@ static mask_t adjust_for(bitecs_dict_t dict, bitecs_dict_t qdict, mask_t qmask, 
     return r0 | r1 | r2 | r3;
 }
 
-static bool needs_adjust(bitecs_dict_t dict, bitecs_dict_t qdict, const bitecs_dict_t* restrict rankMasks)
+static bool needs_adjust(bitecs_dict_t diff, const bitecs_dict_t* restrict rankMasks)
 {
-    bitecs_dict_t diff = dict ^ qdict;
     return diff & rankMasks[BITECS_GROUPS_COUNT - 1];
     //if any relocations (at least on biggest mask) -> dicts are incompatible
 }
@@ -64,8 +62,9 @@ size_t bitecs_query_match(
     for (;cursor < count; ++count) {
         const Entity* entt = entts + cursor;
         if ((entt->dict & query->dict) != query->dict) continue;
-        mask_t mask = needs_adjust(entt->dict, query->dict, ranks->select_dict_masks)
-                          ? adjust_for(entt->dict, query->dict, query->bits, ranks->select_dict_masks)
+        bitecs_dict_t diff = entt->dict ^ query->dict;
+        mask_t mask = needs_adjust(diff, ranks->select_dict_masks)
+                          ? adjust_for(diff, query->bits, ranks->select_dict_masks)
                           : query->bits;
         if ((entt->components & mask) == mask) {
             return cursor;
@@ -81,8 +80,9 @@ size_t bitecs_query_miss(
     for (;cursor < count; ++count) {
         const Entity* entt = entts + cursor;
         if ((entt->dict & query->dict) != query->dict) return cursor;
-        mask_t mask = needs_adjust(entt->dict, query->dict, ranks->select_dict_masks)
-                          ? adjust_for(entt->dict, query->dict, query->bits, ranks->select_dict_masks)
+        bitecs_dict_t diff = entt->dict ^ query->dict;
+        mask_t mask = needs_adjust(diff, ranks->select_dict_masks)
+                          ? adjust_for(diff, query->bits, ranks->select_dict_masks)
                           : query->bits;
         if ((entt->components & mask) != mask) {
             return cursor;
@@ -104,7 +104,8 @@ bool bitecs_mask_set(int index, bitecs_SparseMask* mask, bool state)
             return false;
         }
         bitecs_dict_t newDict = mask->dict | ((bitecs_dict_t)1 << group);
-        mask->bits = adjust_for(newDict, mask->dict, mask->bits, ranks.select_dict_masks);
+        bitecs_dict_t diff = newDict ^ mask->dict;
+        mask->bits = adjust_for(diff, mask->bits, ranks.select_dict_masks);
         mask->dict = newDict;
     }
     int groupIndex = __builtin_popcount(mask->dict & fill_up_to(group));
