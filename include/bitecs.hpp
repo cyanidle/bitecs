@@ -71,6 +71,16 @@ TEST_CASE("Basic Mask Operations")
         CHECK(bitecs_mask_get(203, &mask) == false);
         CHECK(bitecs_mask_get(204, &mask) == true);
         CHECK(bitecs_mask_get(600, &mask) == true);
+
+        SUBCASE("Convert back") {
+            bitecs_BitsStorage back;
+            bitecs_Ranks ranks;
+            bitecs_get_ranks(mask.dict, &ranks);
+            int set = bitecs_mask_into_array(&mask, &ranks, &back);
+            for (int i = 0; i < set; ++i) {
+                CHECK(init[i] == back[i]);
+            }
+        }
     }
 }
 
