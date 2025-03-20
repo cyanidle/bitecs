@@ -13,8 +13,10 @@
 typedef bitecs_mask_t mask_t;
 typedef bitecs_index_t index_t;
 typedef bitecs_dict_t dict_t;
+typedef bitecs_generation_t generation_t;
 typedef bitecs_Ranks Ranks;
 typedef bitecs_Entity Entity;
+typedef bitecs_SparseMask SparseMask;
 
 static dict_t fill_up_to(int bit) {
     return ((dict_t)(1) << bit) - (dict_t)1;
@@ -97,7 +99,7 @@ size_t bitecs_query_miss(
     return cursor;
 }
 
-bool bitecs_mask_set(int index, bitecs_SparseMask* mask, bool state)
+bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state)
 {
     int group = index >> BITECS_GROUP_SHIFT;
     int bit = index & fill_up_to(BITECS_GROUP_SHIFT);
@@ -265,8 +267,9 @@ struct bitecs_registry
 {
     Entity* entities;
     FreeList* freeList;
-    size_t entities_count;
-    uint32_t generation;
+    index_t entities_count;
+    index_t entities_cap;
+    bitecs_generation_t generation;
     component_list* components[BITECS_MAX_COMPONENTS];
 };
 
@@ -315,22 +318,32 @@ void bitecs_system_run(bitecs_registry *reg, const bitecs_SparseMask *query, bit
     // TODO:
 }
 
-bitecs_Entity *bitecs_entt_deref(bitecs_registry *reg, bitecs_EntityPtr entt)
+static Entity* deref(Entity* entts, index_t count, bitecs_EntityPtr ptr)
+{
+    return ptr.index < count && entts[ptr.index].generation == ptr.generation
+        ? entts + ptr.index
+        : NULL;
+}
+
+void *bitecs_entt_add_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
+{
+    Entity* e = deref(reg->entities, reg->entities_count, ptr);
+    { //try to add to bitmask
+        if (!e) return NULL;
+        mask_t was = e->components;
+        if (!bitecs_mask_set((SparseMask*)e, id, true)) return NULL;
+        if (was == e->components) return NULL;
+    }
+    // todo: add single component to lists[id] (reuse batch addition op)
+    // if fail revert mask + ret NULL
+}
+
+void *bitecs_entt_get_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
 {
 
 }
 
-void *bitecs_entt_add_component(bitecs_registry *reg, bitecs_EntityPtr entt, bitecs_comp_id_t id)
-{
-
-}
-
-void *bitecs_entt_get_component(bitecs_registry *reg, bitecs_EntityPtr entt, bitecs_comp_id_t id)
-{
-
-}
-
-bool bitecs_entt_remove_component(bitecs_registry *reg, bitecs_EntityPtr entt, bitecs_comp_id_t id)
+bool bitecs_entt_remove_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
 {
 
 }

@@ -78,10 +78,9 @@ bool bitecs_entt_create(
     bitecs_SingleCreator creator, void* udata);
 
 // returns void* to be used for initialization. or null if already exists/error
-bitecs_Entity* bitecs_entt_deref(bitecs_registry* reg, bitecs_EntityPtr entt);
-void* bitecs_entt_add_component(bitecs_registry* reg, bitecs_EntityPtr entt, bitecs_comp_id_t id);
-bool bitecs_entt_remove_component(bitecs_registry* reg, bitecs_EntityPtr entt, bitecs_comp_id_t id);
-void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr entt, bitecs_comp_id_t id);
+void* bitecs_entt_add_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
+bool bitecs_entt_remove_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
+void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
 
 typedef void (*bitecs_RangeSystem)(void* udata, void** begins, void** ends);
 
@@ -102,7 +101,7 @@ size_t bitecs_query_miss(
 
 // idxs must be sorted!
 bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, int* idxs, int idxs_count);
-bool bitecs_mask_set(int index, bitecs_SparseMask* mask, bool state);
+bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state);
 bool bitecs_mask_get(int index, const bitecs_SparseMask* mask);
 
 typedef int bitecs_BitsStorage[128];

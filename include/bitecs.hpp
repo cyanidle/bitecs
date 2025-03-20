@@ -34,27 +34,27 @@ TEST_CASE("Basic Mask Operations")
     CHECK(mask.bits != 0);
     mask.bits = 0;
     SUBCASE("Set/Get") {
-        bitecs_mask_set(1, &mask, true);
+        bitecs_mask_set(&mask, 1, true);
         CHECK(bitecs_mask_get(1, &mask) == true);
         CHECK(bitecs_mask_get(512, &mask) == false);
-        bitecs_mask_set(512, &mask, true);
+        bitecs_mask_set(&mask, 512, true);
         CHECK(bitecs_mask_get(1, &mask) == true);
         CHECK(bitecs_mask_get(512, &mask) == true);
         CHECK(bitecs_mask_get(513, &mask) == false);
         CHECK(bitecs_mask_get(1023, &mask) == false);
-        bitecs_mask_set(513, &mask, true);
+        bitecs_mask_set(&mask, 513, true);
         CHECK(bitecs_mask_get(1, &mask) == true);
         CHECK(bitecs_mask_get(512, &mask) == true);
         CHECK(bitecs_mask_get(513, &mask) == true);
         CHECK(bitecs_mask_get(1023, &mask) == false);
-        bitecs_mask_set(1023, &mask, true);
+        bitecs_mask_set(&mask, 1023, true);
         CHECK(bitecs_mask_get(1, &mask) == true);
         CHECK(bitecs_mask_get(1023, &mask) == true);
-        bitecs_mask_set(32, &mask, true);
+        bitecs_mask_set(&mask, 32, true);
         CHECK(bitecs_mask_get(1, &mask) == true);
         CHECK(bitecs_mask_get(1023, &mask) == true);
         CHECK(bitecs_mask_get(32, &mask) == true);
-        bitecs_mask_set(1023, &mask, false);
+        bitecs_mask_set(&mask, 1023, false);
         CHECK(bitecs_mask_get(1, &mask) == true);
         CHECK(bitecs_mask_get(1023, &mask) == false);
     }
