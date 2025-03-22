@@ -8,7 +8,11 @@ set(CMAKE_C_STANDARD 17)
 
 option(BITECS_TEST "Build tests" ON)
 
-add_library(bitecs-core src/bitecs_core.c)
+add_library(bitecs-core
+    src/bitecs_core.c
+    src/bitecs_mask.c
+    src/bitecs_private.h
+)
 target_include_directories(bitecs-core PUBLIC include)
 
 CPMAddPackage("gh:doctest/doctest@2.4.11")

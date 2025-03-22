@@ -1,187 +1,19 @@
-#include "bitecs_core.h"
-#include <assert.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-
-#define likely(x)       __builtin_expect(!!(x), 1)
-#define unlikely(x)     __builtin_expect(!!(x), 0)
-
-#define popcnt(x) __builtin_popcount(x)
-
-typedef bitecs_mask_t mask_t;
-typedef bitecs_index_t index_t;
-typedef bitecs_dict_t dict_t;
-typedef bitecs_generation_t generation_t;
-typedef bitecs_Ranks Ranks;
-typedef bitecs_Entity Entity;
-typedef bitecs_SparseMask SparseMask;
-
-static dict_t fill_up_to(int bit) {
-    return ((dict_t)(1) << bit) - (dict_t)1;
-}
-
-void bitecs_get_ranks(dict_t dict, bitecs_Ranks* res)
-{
-    *res = (bitecs_Ranks){0};
-    int out = 0;
-    while(dict) {
-        if (dict & 1) {
-            int i = res->groups_count++;
-            res->group_ranks[i] = out;
-            res->select_dict_masks[i] = fill_up_to(out);
-        }
-        dict >>= 1;
-        out++;
-    }
-}
-
-static mask_t relocate_part(dict_t dictDiff, mask_t mask, int index, const dict_t* restrict rankMasks) {
-    dict_t select_mask = rankMasks[index];
-    int shift = popcnt(dictDiff & select_mask) * BITECS_GROUP_SIZE;
-    int value_mask_offset = index * BITECS_GROUP_SIZE;
-    mask_t value_mask = (mask_t)fill_up_to(BITECS_GROUP_SIZE);
-    mask_t value_mask_shifted = value_mask << value_mask_offset;
-    mask_t value = mask & value_mask_shifted;
-    return value << shift;
-}
-
-static mask_t adjust_for(dict_t diff, mask_t qmask, const dict_t* restrict rankMasks) {
-    mask_t r0 = relocate_part(diff, qmask, 0, rankMasks);
-    mask_t r1 = relocate_part(diff, qmask, 1, rankMasks);
-    mask_t r2 = relocate_part(diff, qmask, 2, rankMasks);
-    mask_t r3 = relocate_part(diff, qmask, 3, rankMasks);
-    return r0 | r1 | r2 | r3;
-}
-
-static bool needs_adjust(dict_t diff, const dict_t* restrict rankMasks)
-{
-    return diff & rankMasks[BITECS_GROUPS_COUNT - 1];
-    //if any relocations (at least on biggest mask) -> dicts are incompatible
-}
-
-size_t bitecs_query_match(
-    size_t cursor, const bitecs_SparseMask* query,
-    const bitecs_Ranks *ranks, const bitecs_Entity* entts, size_t count)
-{
-    for (;cursor < count; ++count) {
-        const Entity* entt = entts + cursor;
-        if ((entt->dict & query->dict) != query->dict) continue;
-        dict_t diff = entt->dict ^ query->dict;
-        mask_t mask = needs_adjust(diff, ranks->select_dict_masks)
-                          ? adjust_for(diff, query->bits, ranks->select_dict_masks)
-                          : query->bits;
-        if ((entt->components & mask) == mask) {
-            return cursor;
-        }
-    }
-    return cursor;
-}
-
-size_t bitecs_query_miss(
-    size_t cursor, const bitecs_SparseMask* query,
-    const bitecs_Ranks *ranks, const bitecs_Entity* entts, size_t count)
-{
-    for (;cursor < count; ++count) {
-        const Entity* entt = entts + cursor;
-        if ((entt->dict & query->dict) != query->dict) return cursor;
-        dict_t diff = entt->dict ^ query->dict;
-        mask_t mask = needs_adjust(diff, ranks->select_dict_masks)
-                          ? adjust_for(diff, query->bits, ranks->select_dict_masks)
-                          : query->bits;
-        if ((entt->components & mask) != mask) {
-            return cursor;
-        }
-        // we cannot save adjusted version to avoid frequents adjusts -> adjust works one way
-        // we may save it, but fallback to original as we encouter missmatch (to confirm it)
-    }
-    return cursor;
-}
-
-bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state)
-{
-    int group = index >> BITECS_GROUP_SHIFT;
-    int bit = index & fill_up_to(BITECS_GROUP_SHIFT);
-    if (unlikely(!(mask->dict & ((dict_t)1 << group)))) {
-        Ranks ranks;
-        bitecs_get_ranks(mask->dict, &ranks);
-        if (unlikely(ranks.groups_count == BITECS_GROUPS_COUNT)) {
-            return false;
-        }
-        dict_t newDict = mask->dict | ((dict_t)1 << group);
-        dict_t diff = newDict ^ mask->dict;
-        mask->bits = adjust_for(diff, mask->bits, ranks.select_dict_masks);
-        mask->dict = newDict;
-    }
-    int groupIndex = popcnt(mask->dict & fill_up_to(group));
-    int shift = groupIndex * BITECS_GROUP_SIZE + bit;
-    bitecs_mask_t selector = (bitecs_mask_t)1 << shift;
-    bitecs_mask_t res;
-    if (state) {
-        res = mask->bits | selector;
-    } else {
-        res = mask->bits & ~selector;
-    }
-    mask->bits = res;
-    return true;
-}
-
-bool bitecs_mask_get(int index, const bitecs_SparseMask* mask)
-{
-    int group = index >> BITECS_GROUP_SHIFT;
-    int bit = index & fill_up_to(BITECS_GROUP_SHIFT);
-    int groupIndex = popcnt(mask->dict & fill_up_to(group));
-    int shift = groupIndex * BITECS_GROUP_SIZE + bit;
-    dict_t temp_dict = (dict_t)1 << group;
-    bool dict_match = mask->dict & temp_dict;
-    bool bits_match = mask->bits & (mask_t)1 << shift;
-    return dict_match && bits_match;
-}
-
-bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, int *idxs, int idxs_count)
-{
-#ifndef NDEBUG
-    {
-        int _last = 0;
-        for (int i = 0; i < idxs_count; ++i) {
-            assert(idxs[i] > 0 && "bitecs_mask_from_array(): Invalid input");
-            assert(_last <= idxs[i] && "bitecs_mask_from_array(): Unsorted input");
-            _last = idxs[i];
-        }
-    }
-#endif
-    maskOut->dict = 0;
-    maskOut->bits = 0;
-    for (int i = 0; i < idxs_count; ++i) {
-        int value = idxs[i];
-        int group = value >> BITECS_GROUP_SHIFT;
-        if (unlikely(group > BITECS_GROUP_SIZE)) {
-            return false;
-        }
-        dict_t newDict = maskOut->dict | (dict_t)1 << group;
-        int groupIndex = popcnt(newDict) - 1;
-        if (unlikely(groupIndex == BITECS_GROUPS_COUNT)) {
-            return false;
-        }
-        maskOut->dict = newDict;
-        int bit = value & fill_up_to(BITECS_GROUP_SHIFT);
-        int shift = groupIndex * BITECS_GROUP_SIZE + bit;
-        maskOut->bits |= (mask_t)1 << shift;
-    }
-    return true;
-}
+#include "bitecs_private.h"
 
 typedef struct component_list
 {
-    size_t* components_in_chunks;
-    void** chunks; //array of memory_blocks of size: chunk_sizeof(this)
-    size_t chunks_count;
+    size_t* nalives;
+    void** chunks;
+    size_t nchunks;
     bitecs_ComponentMeta meta;
 } component_list;
 
+static int components_shift(component_list* list) {
+    return list->meta.frequency + BITECS_FREQUENCY_ADJUST;
+}
+
 static size_t components_in_chunk(component_list* list) {
-    return (size_t)1 << (list->meta.frequency + BITECS_FREQUENCY_ADJUST);
+    return (size_t)1 << components_shift(list);
 }
 
 static size_t chunk_sizeof(component_list* list) {
@@ -199,7 +31,7 @@ static component_list* components_new(bitecs_ComponentMeta meta) {
 static void components_destroy(component_list* list)
 {
     if (!list) return;
-    for (size_t i = 0; i < list->chunks_count; ++i) {
+    for (size_t i = 0; i < list->nchunks; ++i) {
         if (list->chunks[i]) {
             void* chunk = list->chunks[i];
             if (list->meta.deleter) {
@@ -208,6 +40,8 @@ static void components_destroy(component_list* list)
             free(chunk);
         }
     }
+    free(list->nalives);
+    free(list->chunks);
 }
 
 typedef struct FreeList
@@ -245,6 +79,10 @@ static bool add_free(FreeList** _list, index_t index, index_t count) {
     FreeList* old = *_list;
     while(old) {
         if (old->index + old->count == index) {
+            old->count += count;
+            return true;
+        } else if (index + count == old->index) {
+            old->index -= count;
             old->count += count;
             return true;
         }
@@ -309,13 +147,53 @@ void bitecs_registry_delete(bitecs_registry* reg)
     free(reg);
 }
 
-void bitecs_system_run(bitecs_registry *reg, const bitecs_SparseMask *query, bitecs_RangeSystem system, void *udata)
+static index_t select_up_to_chunk(component_list* list, index_t begin, index_t count, void** outBegin, void** outEnd)
 {
-    Ranks ranks;
-    bitecs_get_ranks(query->dict, &ranks);
-    if (!ranks.groups_count) return;
-    void** ptrStorage = alloca(sizeof(void*) * ranks.groups_count * 2);
-    // TODO:
+    index_t chunk = begin >> components_shift(list);
+    index_t i = begin & fill_up_to(components_shift(list));
+    *outBegin = (char*)list->chunks[chunk] + i * list->meta.typesize;
+    index_t chunkTail = components_in_chunk(list) - i;
+    count = count > chunkTail ? chunkTail : count;
+    *outEnd = (char*)*outBegin + count * list->meta.typesize;
+    return count;
+}
+
+bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
+{
+    index_t begin = bitecs_query_match(ctx->cursor, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count - ctx->cursor);
+    if (unlikely(begin == reg->entities_count)) return false;
+    index_t end = bitecs_query_miss(begin, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count - begin);
+    while (end > begin) {
+        index_t count = end - begin;
+        index_t smallestRange = ~(index_t)0;
+        void** rangesBegins = ctx->ptrStorage;
+        void** rangesEnds = ctx->ptrStorage + ctx->ncomps;
+        for (int i = 0; i < ctx->ncomps; ++i) {
+            int comp = ctx->components[i];
+            index_t selected = select_up_to_chunk(reg->components[comp], begin, count, rangesBegins++, rangesEnds++);
+            smallestRange = selected < smallestRange ? selected : smallestRange;
+        }
+        ctx->system(ctx->udata, ctx->ptrStorage, ctx->ptrStorage + ctx->ncomps);
+        begin += smallestRange;
+    }
+    ctx->cursor = end;
+    return end != reg->entities_count;
+}
+
+void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, bitecs_RangeSystem system, void *udata)
+{
+    if (unlikely(!ncomps)) return;
+    bitecs_SystemStepCtx ctx = {0};
+    bitecs_mask_from_array(&ctx.query, components, ncomps);
+    bitecs_get_ranks(ctx.query.dict, &ctx.ranks);
+    ctx.ptrStorage = alloca(sizeof(void*) * ncomps * 2);
+    ctx.system = system;
+    ctx.udata = udata;
+    ctx.components = components;
+    ctx.ncomps = ncomps;
+    while (bitecs_system_step(reg, &ctx)) {
+        // pass
+    }
 }
 
 static Entity* deref(Entity* entts, index_t count, bitecs_EntityPtr ptr)
@@ -325,27 +203,94 @@ static Entity* deref(Entity* entts, index_t count, bitecs_EntityPtr ptr)
         : NULL;
 }
 
+static bool reserve_chunks(component_list* list, index_t index, index_t count)
+{
+    index_t chunk = index >> components_shift(list);
+    index_t totalChunks = count >> components_shift(list);
+    index_t upto = chunk + totalChunks;
+    if (list->nchunks <= upto) {
+        index_t newSize = upto;
+        void** newChunks = malloc(sizeof(void*) * newSize);
+        if (!newChunks) return false;
+        size_t* newCounts = malloc(sizeof(size_t) * newSize);
+        if (!newCounts) {
+            free(newChunks);
+            return false;
+        }
+        memcpy(newChunks, list->chunks, sizeof(void*) * list->nchunks);
+        memcpy(newCounts, list->nalives, sizeof(size_t) * list->nchunks);
+        memset(newChunks, 0, sizeof(void*) * (newSize - list->nchunks));
+        memset(newCounts, 0, sizeof(size_t) * (newSize - list->nchunks));
+        list->chunks = newChunks;
+        list->nalives = newCounts;
+        list->nchunks = newSize;
+    }
+    return true;
+}
+
+
+static bool component_add_range(component_list* list, index_t* index, index_t* count, void** begin, void** end)
+{
+    index_t chunk = *index >> components_shift(list);
+    index_t i = *index & fill_up_to(components_shift(list));
+    index_t diff = components_in_chunk(list) - i;
+    *count -= *count > diff ? diff : *count;
+    *index += *index > diff ? diff : *index;
+    if (unlikely(!list->chunks[chunk])) {
+        list->chunks[chunk] = aligned_alloc(BITECS_COMPONENTS_CHUNK_ALIGN, chunk_sizeof(list));
+        if (unlikely(!list->chunks[chunk])) {
+            *begin = *end = NULL;
+            return false;
+        }
+    }
+    list->nalives[chunk] += diff;
+    *begin = (char*)list->chunks[chunk] + i;
+    *end = (char*)list->chunks[chunk] + diff;
+    return *count > 0; //does it need another iter
+}
+
 void *bitecs_entt_add_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
 {
+    component_list* list = reg->components[id];
+    if (!list) return NULL;
     Entity* e = deref(reg->entities, reg->entities_count, ptr);
+    if (!e) return NULL;
+    mask_t wasDict = e->dict;
+    mask_t wasComponents = e->components;
     { //try to add to bitmask
-        if (!e) return NULL;
-        mask_t was = e->components;
         if (!bitecs_mask_set((SparseMask*)e, id, true)) return NULL;
-        if (was == e->components) return NULL;
+        if (wasComponents == e->components) return NULL;
     }
-    // todo: add single component to lists[id] (reuse batch addition op)
-    // if fail revert mask + ret NULL
+    index_t index = ptr.index;
+    index_t count = 1;
+    void* begin = NULL;
+    void* end;
+    if (reserve_chunks(list, index, count)) {
+        (void)component_add_range(list, &index, &count, &begin, &end);
+    }
+    if (unlikely(!begin)) {
+        e->dict = wasDict;
+        e->components = wasComponents;
+    }
+    return begin;
+}
+
+static void* deref_comp(component_list* list, index_t index)
+{
+    index_t chunk = index >> components_shift(list);
+    index_t i = index & fill_up_to(components_shift(list));
+    return (char*)list->chunks[chunk] + list->meta.typesize * i;
 }
 
 void *bitecs_entt_get_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
 {
-
+    Entity* e = deref(reg->entities, reg->entities_count, ptr);
+    return e && bitecs_mask_get((SparseMask*)e, id) ? deref_comp(reg->components[id], ptr.index) : NULL;
 }
 
 bool bitecs_entt_remove_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
 {
-
+    //TODO
 }
 
 //__builtin_ffs(int): Returns one plus the index of the least significant 1-bit of x, or if x is zero, returns zero.
@@ -365,6 +310,16 @@ bool bitecs_entt_create_batch(
     //todo: init with query
     *outBegin = (bitecs_EntityPtr){reg->generation, found};
     // TODO
+}
+
+bool bitecs_entt_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t count)
+{
+
+}
+
+bool bitecs_entt_destroy(bitecs_registry *reg, bitecs_EntityPtr ptr)
+{
+
 }
 
 typedef struct _single_entt_ctx
@@ -389,33 +344,7 @@ bool bitecs_entt_create(
     return bitecs_entt_create_batch(reg, 1, outPtr, query, _single_entt_helper, &ctx);
 }
 
-void _bitecs_sanity_test(bitecs_SparseMask *out)
+index_t bitecs_entts_count(const bitecs_registry *reg)
 {
-    out->bits = (mask_t)1 << 95;
-}
-
-static void expand_one(int rank, uint32_t part, int offset, bitecs_BitsStorage *storage) {
-    int bit = 0;
-    int out = 0;
-    while(part) {
-        if (part & 1) {
-            (*storage)[offset + out++] = rank * BITECS_GROUP_SIZE + bit;
-        }
-        part >>= 1;
-        bit++;
-    }
-}
-
-int bitecs_mask_into_array(const bitecs_SparseMask *mask, const bitecs_Ranks *ranks, bitecs_BitsStorage *storage)
-{
-    const uint32_t* groups = (const uint32_t*)&mask->bits;
-    int pcnt0 = popcnt(groups[0]);
-    int pcnt1 = popcnt(groups[1]);
-    int pcnt2 = popcnt(groups[2]);
-    int pcnt3 = popcnt(groups[3]);
-    expand_one(ranks->group_ranks[0], groups[0], 0, storage);
-    expand_one(ranks->group_ranks[1], groups[1], pcnt0, storage);
-    expand_one(ranks->group_ranks[2], groups[2], pcnt0 + pcnt1, storage);
-    expand_one(ranks->group_ranks[3], groups[3], pcnt0 + pcnt1 + pcnt2, storage);
-    return pcnt0 + pcnt1 + pcnt2 + pcnt3;
+    return reg->entities_count;
 }

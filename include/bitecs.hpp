@@ -35,42 +35,42 @@ TEST_CASE("Basic Mask Operations")
     mask.bits = 0;
     SUBCASE("Set/Get") {
         bitecs_mask_set(&mask, 1, true);
-        CHECK(bitecs_mask_get(1, &mask) == true);
-        CHECK(bitecs_mask_get(512, &mask) == false);
+        CHECK(bitecs_mask_get(&mask, 1) == true);
+        CHECK(bitecs_mask_get(&mask, 512) == false);
         bitecs_mask_set(&mask, 512, true);
-        CHECK(bitecs_mask_get(1, &mask) == true);
-        CHECK(bitecs_mask_get(512, &mask) == true);
-        CHECK(bitecs_mask_get(513, &mask) == false);
-        CHECK(bitecs_mask_get(1023, &mask) == false);
+        CHECK(bitecs_mask_get(&mask, 1) == true);
+        CHECK(bitecs_mask_get(&mask, 512) == true);
+        CHECK(bitecs_mask_get(&mask, 513) == false);
+        CHECK(bitecs_mask_get(&mask, 1023) == false);
         bitecs_mask_set(&mask, 513, true);
-        CHECK(bitecs_mask_get(1, &mask) == true);
-        CHECK(bitecs_mask_get(512, &mask) == true);
-        CHECK(bitecs_mask_get(513, &mask) == true);
-        CHECK(bitecs_mask_get(1023, &mask) == false);
+        CHECK(bitecs_mask_get(&mask, 1) == true);
+        CHECK(bitecs_mask_get(&mask, 512) == true);
+        CHECK(bitecs_mask_get(&mask, 513) == true);
+        CHECK(bitecs_mask_get(&mask, 1023) == false);
         bitecs_mask_set(&mask, 1023, true);
-        CHECK(bitecs_mask_get(1, &mask) == true);
-        CHECK(bitecs_mask_get(1023, &mask) == true);
+        CHECK(bitecs_mask_get(&mask, 1) == true);
+        CHECK(bitecs_mask_get(&mask, 1023) == true);
         bitecs_mask_set(&mask, 32, true);
-        CHECK(bitecs_mask_get(1, &mask) == true);
-        CHECK(bitecs_mask_get(1023, &mask) == true);
-        CHECK(bitecs_mask_get(32, &mask) == true);
+        CHECK(bitecs_mask_get(&mask, 1) == true);
+        CHECK(bitecs_mask_get(&mask, 1023) == true);
+        CHECK(bitecs_mask_get(&mask, 32) == true);
         bitecs_mask_set(&mask, 1023, false);
-        CHECK(bitecs_mask_get(1, &mask) == true);
-        CHECK(bitecs_mask_get(1023, &mask) == false);
+        CHECK(bitecs_mask_get(&mask, 1) == true);
+        CHECK(bitecs_mask_get(&mask, 1023) == false);
     }
     SUBCASE("Create From Array") {
         int init[] = {100, 101, 120, 200, 202, 204, 600};
         bitecs_SparseMask mask;
         bitecs_mask_from_array(&mask, init, std::size(init));
-        CHECK(bitecs_mask_get(100, &mask) == true);
-        CHECK(bitecs_mask_get(101, &mask) == true);
-        CHECK(bitecs_mask_get(102, &mask) == false);
-        CHECK(bitecs_mask_get(120, &mask) == true);
-        CHECK(bitecs_mask_get(200, &mask) == true);
-        CHECK(bitecs_mask_get(202, &mask) == true);
-        CHECK(bitecs_mask_get(203, &mask) == false);
-        CHECK(bitecs_mask_get(204, &mask) == true);
-        CHECK(bitecs_mask_get(600, &mask) == true);
+        CHECK(bitecs_mask_get(&mask, 100) == true);
+        CHECK(bitecs_mask_get(&mask, 101) == true);
+        CHECK(bitecs_mask_get(&mask, 102) == false);
+        CHECK(bitecs_mask_get(&mask, 120) == true);
+        CHECK(bitecs_mask_get(&mask, 200) == true);
+        CHECK(bitecs_mask_get(&mask, 202) == true);
+        CHECK(bitecs_mask_get(&mask, 203) == false);
+        CHECK(bitecs_mask_get(&mask, 204) == true);
+        CHECK(bitecs_mask_get(&mask, 600) == true);
 
         SUBCASE("Convert back") {
             bitecs_BitsStorage back;
