@@ -31,17 +31,17 @@ TEST_CASE("Basic Mask Operations")
 {
     SUBCASE("Get ranks") {
         bitecs_Ranks ranks;
-        bitecs_get_ranks(0b1, &ranks);
+        bitecs_ranks_get(&ranks, 0b1);
         CHECK(ranks.groups_count == 1);
         CHECK(ranks.group_ranks[0] == 0);
         CHECK(ranks.select_dict_masks[0] == 0);
-        bitecs_get_ranks(0b101, &ranks);
+        bitecs_ranks_get(&ranks, 0b101);
         CHECK(ranks.groups_count == 2);
         CHECK(ranks.group_ranks[0] == 0);
         CHECK(ranks.group_ranks[1] == 2);
         CHECK(ranks.select_dict_masks[0] == 0);
         CHECK(ranks.select_dict_masks[1] == 0b11);
-        bitecs_get_ranks(0b110101, &ranks);
+        bitecs_ranks_get(&ranks, 0b110101);
         CHECK(ranks.groups_count == 4);
         CHECK(ranks.group_ranks[0] == 0);
         CHECK(ranks.group_ranks[1] == 2);
@@ -98,7 +98,7 @@ TEST_CASE("Basic Mask Operations")
         SUBCASE("Convert back") {
             bitecs_BitsStorage back;
             bitecs_Ranks ranks;
-            bitecs_get_ranks(mask.dict, &ranks);
+            bitecs_ranks_get(&ranks, mask.dict);
             int count = bitecs_mask_into_array(&mask, &ranks, &back);
             CHECK(count == std::size(init));
             for (int i = 0; i < count; ++i) {

@@ -1,6 +1,6 @@
 #include "bitecs_private.h"
 
-void bitecs_get_ranks(dict_t dict, bitecs_Ranks* res)
+void bitecs_ranks_get(bitecs_Ranks* res, dict_t dict)
 {
     *res = (bitecs_Ranks){0};
     int rank = 0;
@@ -83,7 +83,7 @@ bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state)
     int bit = index & fill_up_to(BITECS_GROUP_SHIFT);
     if (unlikely(!(mask->dict & ((dict_t)1 << group)))) {
         Ranks ranks;
-        bitecs_get_ranks(mask->dict, &ranks);
+        bitecs_ranks_get(&ranks, mask->dict);
         if (unlikely(ranks.groups_count == BITECS_GROUPS_COUNT)) {
             return false;
         }

@@ -186,7 +186,7 @@ void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, 
     if (unlikely(!ncomps)) return;
     bitecs_SystemStepCtx ctx = {0};
     bitecs_mask_from_array(&ctx.query, components, ncomps);
-    bitecs_get_ranks(ctx.query.dict, &ctx.ranks);
+    bitecs_ranks_get(&ctx.ranks, ctx.query.dict);
     ctx.ptrStorage = alloca(sizeof(void*) * ncomps);
     ctx.system = system;
     ctx.udata = udata;

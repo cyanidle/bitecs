@@ -120,7 +120,7 @@ bool bitecs_system_step(bitecs_registry* reg, bitecs_SystemStepCtx* ctx) _BITECS
 
 bitecs_index_t bitecs_entts_count(const bitecs_registry* reg) _BITECS_NOEXCEPT;
 
-void bitecs_get_ranks(bitecs_dict_t dict, bitecs_Ranks* out) _BITECS_NOEXCEPT;
+void bitecs_ranks_get(bitecs_Ranks* out, bitecs_dict_t dict) _BITECS_NOEXCEPT;
 
 bitecs_index_t bitecs_query_match(
     bitecs_index_t cursor,
