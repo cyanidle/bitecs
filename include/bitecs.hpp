@@ -29,6 +29,29 @@ using comp_id_t = bitecs_comp_id_t;
 
 TEST_CASE("Basic Mask Operations")
 {
+    SUBCASE("Get ranks") {
+        bitecs_Ranks ranks;
+        bitecs_get_ranks(0b1, &ranks);
+        CHECK(ranks.groups_count == 1);
+        CHECK(ranks.group_ranks[0] == 0);
+        CHECK(ranks.select_dict_masks[0] == 0);
+        bitecs_get_ranks(0b101, &ranks);
+        CHECK(ranks.groups_count == 2);
+        CHECK(ranks.group_ranks[0] == 0);
+        CHECK(ranks.group_ranks[1] == 2);
+        CHECK(ranks.select_dict_masks[0] == 0);
+        CHECK(ranks.select_dict_masks[1] == 0b11);
+        bitecs_get_ranks(0b110101, &ranks);
+        CHECK(ranks.groups_count == 4);
+        CHECK(ranks.group_ranks[0] == 0);
+        CHECK(ranks.group_ranks[1] == 2);
+        CHECK(ranks.group_ranks[2] == 4);
+        CHECK(ranks.group_ranks[3] == 5);
+        CHECK(ranks.select_dict_masks[0] == 0);
+        CHECK(ranks.select_dict_masks[1] == 0b11);
+        CHECK(ranks.select_dict_masks[2] == 0b1111);
+        CHECK(ranks.select_dict_masks[3] == 0b11111);
+    }
     bitecs_SparseMask mask{};
     _bitecs_sanity_test(&mask);
     CHECK(mask.bits != 0);
@@ -76,8 +99,9 @@ TEST_CASE("Basic Mask Operations")
             bitecs_BitsStorage back;
             bitecs_Ranks ranks;
             bitecs_get_ranks(mask.dict, &ranks);
-            int set = bitecs_mask_into_array(&mask, &ranks, &back);
-            for (int i = 0; i < set; ++i) {
+            int count = bitecs_mask_into_array(&mask, &ranks, &back);
+            CHECK(count == std::size(init));
+            for (int i = 0; i < count; ++i) {
                 CHECK(init[i] == back[i]);
             }
         }

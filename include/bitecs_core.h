@@ -5,7 +5,10 @@
 #include <stdbool.h>
 
 #ifdef __cplusplus
+#define _BITECS_NOEXCEPT noexcept
 extern "C" {
+#else
+#define _BITECS_NOEXCEPT
 #endif
 
 typedef __uint128_t bitecs_mask_t;
@@ -50,50 +53,60 @@ typedef struct bitecs_Ranks {
 
 typedef struct bitecs_registry bitecs_registry;
 
-bitecs_registry* bitecs_registry_new(void);
-void bitecs_registry_delete(bitecs_registry* reg);
+bitecs_registry* bitecs_registry_new(void) _BITECS_NOEXCEPT;
+void bitecs_registry_delete(bitecs_registry* reg) _BITECS_NOEXCEPT;
+
+// for loading stuff in background:
+// 1) create clone with same registered components from main
+// 2) do stuff with it (create entts + components on them)
+// 3) merge it into main one
+bool bitecs_registry_clone_settings(bitecs_registry* reg, bitecs_registry* out) _BITECS_NOEXCEPT;
+bool bitecs_registry_merge_other(bitecs_registry* reg, bitecs_registry* from) _BITECS_NOEXCEPT;
 
 typedef struct bitecs_ComponentMeta {
     // sizeof(T) of a single component
     size_t typesize;
     // frequency: 1-9. How frequent is this component.
     int frequency;
-    void (*deleter)(void* begin, void* end);
+    void (*deleter)(void* begin, bitecs_index_t count);
 } bitecs_ComponentMeta;
 
-bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta);
+bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta) _BITECS_NOEXCEPT;
 
-typedef void(*bitecs_RangeCreator)(void* udata, bitecs_comp_id_t id, void* begin, void* end);
+typedef bool (*bitecs_RangeCreator)(void* udata, bitecs_comp_id_t id, void* begin, void* end) _BITECS_NOEXCEPT;
 
 bool bitecs_entt_create_batch(
     bitecs_registry* reg, bitecs_index_t count,
     bitecs_EntityPtr* outBegin,
-    const bitecs_SparseMask* query,
-    bitecs_RangeCreator creator, void* udata);
+    const int* comps, int ncomps,
+    bitecs_RangeCreator creator, void* udata) _BITECS_NOEXCEPT;
 
-typedef void(*bitecs_SingleCreator)(void* udata, bitecs_comp_id_t id, void* component);
+typedef bool (*bitecs_SingleCreator)(void* udata, bitecs_comp_id_t id, void* component) _BITECS_NOEXCEPT;
 
 // all except reg can be null
 bool bitecs_entt_create(
     bitecs_registry* reg, bitecs_EntityPtr* outPtr,
-    const bitecs_SparseMask* query,
-    bitecs_SingleCreator creator, void* udata);
+    const int* comps, int ncomps,
+    bitecs_SingleCreator creator, void* udata) _BITECS_NOEXCEPT;
 
-bool bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr);
-bool bitecs_entt_destroy_batch(bitecs_registry* reg, bitecs_index_t ptr, bitecs_index_t count);
+bool bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr) _BITECS_NOEXCEPT;
+bool bitecs_entt_destroy_batch(bitecs_registry* reg, bitecs_index_t ptr, bitecs_index_t count) _BITECS_NOEXCEPT;
 
 // returns void* to be used for initialization. or null if already exists/error
-void* bitecs_entt_add_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
-bool bitecs_entt_remove_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
-void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
+void* bitecs_entt_add_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id) _BITECS_NOEXCEPT;
+bool bitecs_entt_remove_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id) _BITECS_NOEXCEPT;
+void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id) _BITECS_NOEXCEPT;
 
-typedef void (*bitecs_RangeSystem)(void* udata, void** begins, void** ends);
+typedef void (*bitecs_RangeSystem)(void* udata, void** begins, bitecs_index_t count) _BITECS_NOEXCEPT;
 
-void bitecs_system_run(bitecs_registry* reg, const int* components, int ncomps, bitecs_RangeSystem system, void* udata);
+void bitecs_system_run(
+    bitecs_registry* reg,
+    const int* components, int ncomps,
+    bitecs_RangeSystem system, void* udata) _BITECS_NOEXCEPT;
 
 typedef struct bitecs_SystemStepCtx
 {
-    void** ptrStorage;
+    void** ptrStorage; //should have space for ncomps: void*
     const int* components;
     int ncomps;
     bitecs_RangeSystem system;
@@ -103,37 +116,33 @@ typedef struct bitecs_SystemStepCtx
     bitecs_index_t cursor;
 } bitecs_SystemStepCtx;
 
-// lower level api: allows suspending updates
-// void** ptrStorage: should be an array of void*[N*2]: N - number of components queried at the same time
-bool bitecs_system_step(bitecs_registry* reg, bitecs_SystemStepCtx* ctx);
+bool bitecs_system_step(bitecs_registry* reg, bitecs_SystemStepCtx* ctx) _BITECS_NOEXCEPT;
 
-bitecs_index_t bitecs_entts_count(const bitecs_registry* reg);
+bitecs_index_t bitecs_entts_count(const bitecs_registry* reg) _BITECS_NOEXCEPT;
 
-void bitecs_get_ranks(bitecs_dict_t dict, bitecs_Ranks* out);
+void bitecs_get_ranks(bitecs_dict_t dict, bitecs_Ranks* out) _BITECS_NOEXCEPT;
 
 bitecs_index_t bitecs_query_match(
     bitecs_index_t cursor,
     const bitecs_SparseMask* query, const bitecs_Ranks* ranks,
-    const bitecs_Entity* entts, bitecs_index_t count);
+    const bitecs_Entity* entts, bitecs_index_t count) _BITECS_NOEXCEPT;
 
 bitecs_index_t bitecs_query_miss(
     bitecs_index_t cursor,
     const bitecs_SparseMask* query, const bitecs_Ranks* ranks,
-    const bitecs_Entity* entts, bitecs_index_t count);
+    const bitecs_Entity* entts, bitecs_index_t count) _BITECS_NOEXCEPT;
 
 // idxs must be sorted!
-bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count);
-bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state);
-bool bitecs_mask_get(const bitecs_SparseMask* mask, int index);
+bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count) _BITECS_NOEXCEPT;
+bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state) _BITECS_NOEXCEPT;
+bool bitecs_mask_get(const bitecs_SparseMask* mask, int index) _BITECS_NOEXCEPT;
 
 typedef int bitecs_BitsStorage[128];
 // returns N bits, that got written to storage*
-int bitecs_mask_into_array(const bitecs_SparseMask* mask, const bitecs_Ranks* ranks, bitecs_BitsStorage* storage);
+int bitecs_mask_into_array(
+    const bitecs_SparseMask* mask, const bitecs_Ranks* ranks, bitecs_BitsStorage* storage) _BITECS_NOEXCEPT;
 
-void _bitecs_sanity_test(bitecs_SparseMask* out);
-
-
-// TODO: registry merge operation
+void _bitecs_sanity_test(bitecs_SparseMask* out) _BITECS_NOEXCEPT;
 
 #ifdef __cplusplus
 }

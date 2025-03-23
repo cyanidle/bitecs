@@ -2,7 +2,7 @@
 
 typedef struct component_list
 {
-    size_t* nalives;
+    index_t* nalives;
     void** chunks;
     size_t nchunks;
     bitecs_ComponentMeta meta;
@@ -35,7 +35,7 @@ static void components_destroy(component_list* list)
         if (list->chunks[i]) {
             void* chunk = list->chunks[i];
             if (list->meta.deleter) {
-                list->meta.deleter(chunk, (char*)chunk + chunk_sizeof(list));
+                list->meta.deleter(chunk, components_in_chunk(list));
             }
             free(chunk);
         }
@@ -63,6 +63,7 @@ static bool take_free(FreeList** _list, index_t count, index_t* outIndex) {
             list->index += count;
             return true;
         } else if (list->count == count) {
+            *outIndex = list->index;
             if (list->prev) list->prev->next = list->next;
             if (list->next) list->next->prev = list->prev;
             *_list = list->next;
@@ -119,11 +120,14 @@ bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_C
     return (bool)reg->components[id];
 }
 
+static Entity null_entt;
+
 bitecs_registry* bitecs_registry_new(void)
 {
     bitecs_registry* result = malloc(sizeof(bitecs_registry));
     if (!result) return result;
     *result = (bitecs_registry){0};
+    result->entities = &null_entt;
     return result;
 }
 
@@ -147,15 +151,13 @@ void bitecs_registry_delete(bitecs_registry* reg)
     free(reg);
 }
 
-static index_t select_up_to_chunk(component_list* list, index_t begin, index_t count, void** outBegin, void** outEnd)
+static index_t select_up_to_chunk(component_list* list, index_t begin, index_t count, void** outBegin)
 {
     index_t chunk = begin >> components_shift(list);
     index_t i = begin & fill_up_to(components_shift(list));
     *outBegin = (char*)list->chunks[chunk] + i * list->meta.typesize;
     index_t chunkTail = components_in_chunk(list) - i;
-    count = count > chunkTail ? chunkTail : count;
-    *outEnd = (char*)*outBegin + count * list->meta.typesize;
-    return count;
+    return count > chunkTail ? chunkTail : count;
 }
 
 bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
@@ -166,14 +168,13 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
     while (end > begin) {
         index_t count = end - begin;
         index_t smallestRange = ~(index_t)0;
-        void** rangesBegins = ctx->ptrStorage;
-        void** rangesEnds = ctx->ptrStorage + ctx->ncomps;
+        void** begins = ctx->ptrStorage;
         for (int i = 0; i < ctx->ncomps; ++i) {
             int comp = ctx->components[i];
-            index_t selected = select_up_to_chunk(reg->components[comp], begin, count, rangesBegins++, rangesEnds++);
+            index_t selected = select_up_to_chunk(reg->components[comp], begin, count, begins++);
             smallestRange = selected < smallestRange ? selected : smallestRange;
         }
-        ctx->system(ctx->udata, ctx->ptrStorage, ctx->ptrStorage + ctx->ncomps);
+        ctx->system(ctx->udata, ctx->ptrStorage, smallestRange);
         begin += smallestRange;
     }
     ctx->cursor = end;
@@ -186,7 +187,7 @@ void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, 
     bitecs_SystemStepCtx ctx = {0};
     bitecs_mask_from_array(&ctx.query, components, ncomps);
     bitecs_get_ranks(ctx.query.dict, &ctx.ranks);
-    ctx.ptrStorage = alloca(sizeof(void*) * ncomps * 2);
+    ctx.ptrStorage = alloca(sizeof(void*) * ncomps);
     ctx.system = system;
     ctx.udata = udata;
     ctx.components = components;
@@ -212,17 +213,17 @@ static bool reserve_chunks(component_list* list, index_t index, index_t count)
         index_t newSize = upto;
         void** newChunks = malloc(sizeof(void*) * newSize);
         if (!newChunks) return false;
-        size_t* newCounts = malloc(sizeof(size_t) * newSize);
-        if (!newCounts) {
+        index_t* newAlives = malloc(sizeof(index_t) * newSize);
+        if (!newAlives) {
             free(newChunks);
             return false;
         }
         memcpy(newChunks, list->chunks, sizeof(void*) * list->nchunks);
-        memcpy(newCounts, list->nalives, sizeof(size_t) * list->nchunks);
+        memcpy(newAlives, list->nalives, sizeof(index_t) * list->nchunks);
         memset(newChunks, 0, sizeof(void*) * (newSize - list->nchunks));
-        memset(newCounts, 0, sizeof(size_t) * (newSize - list->nchunks));
+        memset(newAlives, 0, sizeof(index_t) * (newSize - list->nchunks));
         list->chunks = newChunks;
-        list->nalives = newCounts;
+        list->nalives = newAlives;
         list->nchunks = newSize;
     }
     return true;
@@ -290,36 +291,104 @@ void *bitecs_entt_get_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bite
 
 bool bitecs_entt_remove_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
 {
-    //TODO
+    Entity* e = deref(reg->entities, reg->entities_count, ptr);
+    if (unlikely(!e)) return false;
+    if (!bitecs_mask_get((SparseMask*)e, id)) return false;
+    component_list* list = reg->components[id];
+    index_t chunk = ptr.index >> components_shift(list);
+    index_t i = ptr.index & fill_up_to(components_shift(list));
+    void* comp = (char*)list->chunks[chunk] + i * list->meta.typesize;
+    if (list->meta.deleter) {
+        list->meta.deleter(comp, 1);
+    }
+    if (list->nalives[chunk]-- == 1) {
+        free(list->chunks[chunk]);
+    }
+    (void)bitecs_mask_set((SparseMask*)e, id, false);
+    return true;
 }
 
-//__builtin_ffs(int): Returns one plus the index of the least significant 1-bit of x, or if x is zero, returns zero.
-//__builtin_clz(uint): leading zeroes
-//__builtin_ctz(uint): trailing zeroes
+static bool reserve_entts(bitecs_registry *reg, index_t count)
+{
+    if (count > reg->entities_cap) {
+        index_t newCap = reg->entities_cap * 1.7;
+        if (newCap < count) newCap = count;
+        Entity* newEnts = aligned_alloc(BITECS_COMPONENTS_CHUNK_ALIGN, sizeof(Entity) * newCap);
+        if (unlikely(!newEnts)) return false;
+        memcpy(newEnts, reg->entities, sizeof(Entity) * reg->entities_count);
+        free(reg->entities);
+        reg->entities = newEnts;
+        reg->entities_cap = newCap;
+    }
+    return true;
+}
 
 bool bitecs_entt_create_batch(
     bitecs_registry *reg, index_t count,
     bitecs_EntityPtr *outBegin,
-    const bitecs_SparseMask* query,
+    const int* comps, int ncomps,
     bitecs_RangeCreator creator, void* udata)
 {
     index_t found;
     if (!take_free(&reg->freeList, count, &found)) {
-        // todo: resize entts vector
+        if (unlikely(!reserve_entts(reg, reg->entities_count + count))) {
+            return false;
+        }
+        found = reg->entities_count;
     }
-    //todo: init with query
+    SparseMask mask;
+    if (unlikely(!bitecs_mask_from_array(&mask, comps, ncomps))) return false;
+    for (index_t i = found; i < found + count; ++i) {
+        reg->entities[i].components = mask.bits;
+        reg->entities[i].dict = mask.bits;
+        reg->entities[i].generation = reg->generation;
+    }
+    for (int i = 0; i < ncomps; ++i) {
+        int comp = comps[i];
+        component_list* list = reg->components[comp];
+        if (unlikely(!list)) return false;
+        if (unlikely(!reserve_chunks(list, found, count))) return false;
+        index_t cursor_index = found;
+        index_t cursor_count = count;
+        void* begin;
+        void* end;
+        while(component_add_range(list, &cursor_index, &cursor_count, &begin, &end)) {
+            creator(udata, comp, begin, end);
+        }
+    }
+    reg->entities_count += count;
     *outBegin = (bitecs_EntityPtr){reg->generation, found};
-    // TODO
+    return true;
 }
 
 bool bitecs_entt_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t count)
 {
-
+    if (unlikely(ptr + count > reg->entities_count)) {
+        return false;
+    }
+    for (int i = 0; i < BITECS_MAX_COMPONENTS; ++i) {
+        component_list* list = reg->components[i];
+        if (!list) continue;
+        index_t cursor = ptr;
+        index_t cursor_count = count;
+        do {
+            void* begin;
+            index_t part = select_up_to_chunk(list, cursor, cursor_count, &begin);
+            if (list->meta.deleter) {
+                list->meta.deleter(begin, part);
+            }
+            cursor += part;
+            cursor_count -= part;
+        } while(cursor_count);
+    }
+    add_free(&reg->freeList, ptr, count);
+    return true;
 }
 
 bool bitecs_entt_destroy(bitecs_registry *reg, bitecs_EntityPtr ptr)
 {
-
+    return deref(reg->entities, reg->entities_count, ptr) &&
+        bitecs_entt_destroy_batch(reg, ptr.index, 1);
 }
 
 typedef struct _single_entt_ctx
@@ -328,23 +397,40 @@ typedef struct _single_entt_ctx
     void *udata;
 } _single_entt_ctx;
 
-static void _single_entt_helper(void* udata, bitecs_comp_id_t id, void* begin, void* end)
+static bool _single_entt_helper(void* udata, bitecs_comp_id_t id, void* begin, void* end)
 {
     _single_entt_ctx* ctx = udata;
     (void)end;
-    ctx->creator(ctx->udata, id, begin);
+    return ctx->creator(ctx->udata, id, begin);
 }
 
 bool bitecs_entt_create(
     bitecs_registry *reg, bitecs_EntityPtr *outPtr,
-    const bitecs_SparseMask* query,
+    const int* comps, int ncomps,
     bitecs_SingleCreator creator, void *udata)
 {
     _single_entt_ctx ctx = {creator, udata};
-    return bitecs_entt_create_batch(reg, 1, outPtr, query, _single_entt_helper, &ctx);
+    return bitecs_entt_create_batch(reg, 1, outPtr, comps, ncomps, _single_entt_helper, &ctx);
 }
 
 index_t bitecs_entts_count(const bitecs_registry *reg)
 {
     return reg->entities_count;
+}
+
+// clone/merge
+
+bool bitecs_registry_merge_other(bitecs_registry *reg, bitecs_registry *from)
+{
+    if (unlikely(!reserve_entts(reg, reg->entities_count + from->entities_count))) return false;
+    // migrate all components to index + reg->count;
+    // reg->entities_count += from->entities_count;
+    assert(false && "Not implemented");
+    return false;
+}
+
+bool bitecs_registry_clone_settings(bitecs_registry *reg, bitecs_registry *out)
+{
+    assert(false && "Not implemented");
+    return false;
 }

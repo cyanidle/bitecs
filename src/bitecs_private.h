@@ -7,10 +7,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)
 #define popcnt(x) __builtin_popcount(x)
-
+#define clz(x) __builtin_clz(x)
+#define ctz(x) __builtin_ctz(x)
 
 typedef bitecs_mask_t mask_t;
 typedef bitecs_index_t index_t;

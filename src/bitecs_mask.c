@@ -1,18 +1,17 @@
 #include "bitecs_private.h"
 
-
 void bitecs_get_ranks(dict_t dict, bitecs_Ranks* res)
 {
     *res = (bitecs_Ranks){0};
-    int out = 0;
+    int rank = 0;
     while(dict) {
-        if (dict & 1) {
-            int i = res->groups_count++;
-            res->group_ranks[i] = out;
-            res->select_dict_masks[i] = fill_up_to(out);
-        }
-        dict >>= 1;
-        out++;
+        int trailing = ctz(dict);
+        rank += trailing;
+        int i = res->groups_count++;
+        res->group_ranks[i] = rank;
+        res->select_dict_masks[i] = fill_up_to(rank);
+        dict >>= trailing + 1;
+        rank++;
     }
 }
 
@@ -101,6 +100,7 @@ bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state)
         res = mask->bits | selector;
     } else {
         res = mask->bits & ~selector;
+        // todo: adjust dict if was last bit
     }
     mask->bits = res;
     return true;
@@ -156,14 +156,14 @@ void _bitecs_sanity_test(bitecs_SparseMask *out)
     out->bits = (mask_t)1 << 95;
 }
 
-static void expand_one(int rank, uint32_t part, int offset, bitecs_BitsStorage *storage) {
+static void expand_one(int bitOffset, uint32_t part, int offset, bitecs_BitsStorage *storage) {
     int bit = 0;
     int out = 0;
     while(part) {
-        if (part & 1) {
-            (*storage)[offset + out++] = rank * BITECS_GROUP_SIZE + bit;
-        }
-        part >>= 1;
+        int trailing = ctz(part);
+        bit += trailing;
+        (*storage)[offset + out++] = bitOffset + bit;
+        part >>= trailing + 1;
         bit++;
     }
 }
@@ -175,9 +175,9 @@ int bitecs_mask_into_array(const bitecs_SparseMask *mask, const bitecs_Ranks *ra
     int pcnt1 = popcnt(groups[1]);
     int pcnt2 = popcnt(groups[2]);
     int pcnt3 = popcnt(groups[3]);
-    expand_one(ranks->group_ranks[0], groups[0], 0, storage);
-    expand_one(ranks->group_ranks[1], groups[1], pcnt0, storage);
-    expand_one(ranks->group_ranks[2], groups[2], pcnt0 + pcnt1, storage);
-    expand_one(ranks->group_ranks[3], groups[3], pcnt0 + pcnt1 + pcnt2, storage);
+    expand_one(ranks->group_ranks[0] << BITECS_GROUP_SHIFT, groups[0], 0, storage);
+    expand_one(ranks->group_ranks[1] << BITECS_GROUP_SHIFT, groups[1], pcnt0, storage);
+    expand_one(ranks->group_ranks[2] << BITECS_GROUP_SHIFT, groups[2], pcnt0 + pcnt1, storage);
+    expand_one(ranks->group_ranks[3] << BITECS_GROUP_SHIFT, groups[3], pcnt0 + pcnt1 + pcnt2, storage);
     return pcnt0 + pcnt1 + pcnt2 + pcnt3;
 }
