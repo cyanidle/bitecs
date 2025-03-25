@@ -43,10 +43,12 @@ index_t bitecs_query_match(
     index_t cursor, const bitecs_SparseMask* query,
     const bitecs_Ranks *ranks, const bitecs_Entity* entts, index_t count)
 {
-    for (;cursor < count; ++count) {
+    for (;cursor < count; ++cursor) {
         const Entity* entt = entts + cursor;
-        if ((entt->dict & query->dict) != query->dict) continue;
-        dict_t diff = entt->dict ^ query->dict;
+        dict_t edict = entt->dict;
+        dict_t qdict = query->dict;
+        if ((edict & qdict) != qdict) continue;
+        dict_t diff = edict ^ qdict;
         mask_t mask = needs_adjust(diff, ranks->select_dict_masks)
                           ? adjust_for(diff, query->bits, ranks->select_dict_masks)
                           : query->bits;
@@ -61,7 +63,7 @@ bitecs_index_t bitecs_query_miss(
     bitecs_index_t cursor, const bitecs_SparseMask* query,
     const bitecs_Ranks *ranks, const bitecs_Entity* entts, bitecs_index_t count)
 {
-    for (;cursor < count; ++count) {
+    for (;cursor < count; ++cursor) {
         const Entity* entt = entts + cursor;
         if ((entt->dict & query->dict) != query->dict) return cursor;
         dict_t diff = entt->dict ^ query->dict;
