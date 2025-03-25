@@ -2,6 +2,7 @@
 
 void bitecs_ranks_get(bitecs_Ranks* res, dict_t dict)
 {
+    assert(popcnt(dict) <= BITECS_GROUPS_COUNT);
     *res = (bitecs_Ranks){0};
     int rank = 0;
     while(dict) {
