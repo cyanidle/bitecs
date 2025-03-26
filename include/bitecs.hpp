@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "bitecs_impl.hpp"
 #if !defined(DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN) && !defined(DOCTEST_CONFIG_IMPLEMENT)
 #define DOCTEST_CONFIG_DISABLE
 #endif
@@ -21,27 +22,6 @@
 namespace bitecs
 {
 
-using dict_t = bitecs_dict_t;
-using mask_t = bitecs_mask_t;
-using index_t = bitecs_index_t;
-using generation_t = bitecs_generation_t;
-using comp_id_t = bitecs_comp_id_t;
-using Entity = bitecs_Entity;
-using EntityPtr = bitecs_EntityPtr;
-
-template<typename T>
-struct component_info {
-    static constexpr int id = T::bitecs_id;
-};
-
-template<typename T>
-int component_id = component_info<T>::id;
-
-#define BITECS_COMPONENT(T, _id) \
-template<> struct bitecs::component_info<T> { \
-    static constexpr int id = _id;\
-}
-
 struct SparseMask
 {
     bitecs_SparseMask mask = {};
@@ -53,50 +33,17 @@ struct SparseMask
     }
 };
 
-template<typename, typename, typename...>
-struct _system_thunk;
-template<typename Fn, typename...Comps, size_t...Is>
-struct _system_thunk<Fn, std::index_sequence<Is...>, Comps...>
-{
-    static void* call(void* udata, void** begins, bitecs_index_t count) noexcept
-    {
-        try {
-            Fn& f = *static_cast<Fn*>(udata);
-            for (size_t i = 0; i < count; ++i) {
-                f(*(static_cast<Comps*>(begins[Is]) + i)...);
-            }
-            return nullptr;
-        } catch (...) {
-            void* err;
-            static_assert(sizeof(void*) == sizeof(std::exception_ptr));
-            new (&err) std::exception_ptr(std::current_exception());
-            return err;
-        }
-    }
-};
-
-template<typename T>
-void _deleter_for(void* begin, index_t count) {
-    for (index_t i = 0; i < count; ++i) {
-        static_cast<T*>(begin)[i].~T();
-    }
-}
-
 // todo: make whole class constexpr
-template<typename...Cs>
-struct Components
+template<typename...Comps>
+class Components
 {
-    std::array<int, sizeof...(Cs)> _data;
-    Components() {
-        _data = {component_id<Cs>...};
-        std::sort(_data.begin(), _data.end());
-        // todo: replace check with constexpr version.
-        SparseMask(_data.data(), _data.size());
-    }
-    const int* data() const noexcept {
+    static constexpr auto _data = impl::prepare_comps<Comps...>();
+    static_assert(impl::count_groups(_data.data(), _data.size()) <= BITECS_GROUPS_COUNT);
+public:
+    static constexpr const int* data() noexcept {
         return _data.data();
     }
-    int size() const noexcept {
+    static constexpr int size() noexcept {
         return int(_data.size());
     }
 };
@@ -113,35 +60,8 @@ struct SystemProxy
 
     template<typename Fn>
     void Run(Fn&& f) {
-        constexpr auto* system = _system_thunk<Fn, std::index_sequence_for<C...>, C...>::call;
-        std::exception_ptr error;
-        if (!bitecs_system_run(reg, comps.data(), comps.size(), system, &f, reinterpret_cast<void**>(&error)) && error) {
-            std::rethrow_exception(error);
-        }
-    }
-};
-
-template<typename Comp>
-bool _try_create_single(void* data, bitecs_comp_id_t id, void* out) {
-    if (component_id<Comp> == id) {
-        new (out) Comp(std::move(*static_cast<Comp*>(data)));
-        return true;
-    }
-    return false;
-}
-
-template<typename, typename...>
-struct _single_creator;
-template<typename...Comps, size_t...Is>
-struct _single_creator<std::index_sequence<Is...>, Comps...> {
-    static bool call(void* udata, bitecs_comp_id_t id, void* begin, bitecs_index_t) noexcept
-    {
-        try {
-            (void)(_try_create_single<Comps>(static_cast<void**>(udata)[Is], id, begin) || ...);
-            return true;
-        } catch (...) {
-            return false; //return err?
-        }
+        constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<C...>, C...>::call;
+        bitecs_system_run(reg, comps.data(), comps.size(), system, &f);
     }
 };
 
@@ -163,7 +83,7 @@ struct Registry
     void DefineComponent(bitecs_Frequency freq) {
         bitecs_ComponentMeta meta {sizeof(T), freq, nullptr};
         if (!std::is_trivially_destructible_v<T>) {
-            meta.deleter = _deleter_for<T>;
+            meta.deleter = impl::deleter_for<T>;
         }
         if (!bitecs_component_define(reg, component_id<T>, meta)) {
             throw std::runtime_error("Could not define");
@@ -175,10 +95,10 @@ struct Registry
     }
     template<typename...Comps>
     EntityPtr CreateEntt(Comps...comps) {
-        Components<Comps...> c;
+        constexpr Components<Comps...> c;
         EntityPtr res;
         void* temp[] = {&comps...};
-        constexpr auto* creator = _single_creator<std::index_sequence_for<Comps...>, Comps...>::call;
+        constexpr auto* creator = impl::single_creator<std::index_sequence_for<Comps...>, Comps...>::call;
         const int* cdata = c.data();
         int csize = c.size();
         if (!bitecs_entt_create(reg, 1, &res, cdata, csize, creator, &temp)) {

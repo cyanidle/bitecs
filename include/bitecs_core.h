@@ -101,7 +101,7 @@ bool bitecs_entt_create(
     const int* comps, int ncomps,
     bitecs_RangeCreator creator, void* udata);
 
-typedef bool (*bitecs_SingleCreator)(void* udata, bitecs_comp_id_t id, void* component);
+typedef void (*bitecs_SingleCreator)(void* udata, bitecs_comp_id_t id, void* component);
 
 _BITECS_NODISCARD
 bool bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr);
@@ -115,14 +115,12 @@ bool bitecs_entt_remove_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bi
 _BITECS_NODISCARD
 void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
 
-typedef void* (*bitecs_RangeSystem)(void* udata, void** begins, bitecs_index_t count);
+typedef void (*bitecs_RangeSystem)(void* udata, void** begins, bitecs_index_t count);
 
-_BITECS_NODISCARD
-bool bitecs_system_run(
+void bitecs_system_run(
     bitecs_registry* reg,
     const int* components, int ncomps,
-    bitecs_RangeSystem system, void* udata,
-    void** error);
+    bitecs_RangeSystem system, void* udata);
 
 _BITECS_NODISCARD
 bool bitecs_check_components(bitecs_registry* reg, const int* components, int ncomps);
@@ -137,7 +135,6 @@ typedef struct
     bitecs_SparseMask query;
     bitecs_Ranks ranks;
     bitecs_index_t cursor;
-    void* error;
 } bitecs_SystemStepCtx;
 
 _BITECS_NODISCARD

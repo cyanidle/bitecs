@@ -171,24 +171,19 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
             index_t selected = select_up_to_chunk(reg->components[comp], begin, count, begins++);
             smallestRange = selected < smallestRange ? selected : smallestRange;
         }
-        void* err;
-        if (unlikely(err = ctx->system(ctx->udata, ctx->ptrStorage, smallestRange))) {
-            ctx->error = err;
-            return false;
-        }
+        ctx->system(ctx->udata, ctx->ptrStorage, smallestRange);
         begin += smallestRange;
     }
     ctx->cursor = end;
     return end != reg->entities_count;
 }
 
-bool bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, bitecs_RangeSystem system, void *udata, void** error)
+void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, bitecs_RangeSystem system, void *udata)
 {
-    if (unlikely(!ncomps)) return true;
+    if (unlikely(!ncomps)) return;
     bitecs_SystemStepCtx ctx = {0};
     if (!bitecs_mask_from_array(&ctx.query, components, ncomps)) {
-        *error = NULL;
-        return false;
+        return;
     }
     bitecs_ranks_get(&ctx.ranks, ctx.query.dict);
     ctx.ptrStorage = alloca(sizeof(void*) * ncomps);
@@ -199,8 +194,6 @@ bool bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, 
     while (bitecs_system_step(reg, &ctx)) {
         // pass
     }
-    *error = ctx.error;
-    return !ctx.error;
 }
 
 static Entity* deref(Entity* entts, index_t count, bitecs_EntityPtr ptr)

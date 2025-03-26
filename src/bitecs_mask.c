@@ -46,10 +46,8 @@ index_t bitecs_query_match(
 {
     for (;cursor < count; ++cursor) {
         const Entity* entt = entts + cursor;
-        dict_t edict = entt->dict;
-        dict_t qdict = query->dict;
-        if ((edict & qdict) != qdict) continue;
-        dict_t diff = edict ^ qdict;
+        if ((entt->dict & query->dict) != query->dict) continue;
+        dict_t diff = entt->dict ^ query->dict;
         mask_t mask = needs_adjust(diff, ranks->select_dict_masks)
                           ? adjust_for(diff, query->bits, ranks->select_dict_masks)
                           : query->bits;
