@@ -28,7 +28,7 @@ typedef int bitecs_comp_id_t;
 #define BITECS_MAX_COMPONENTS (BITECS_GROUP_SIZE * BITECS_BITS_IN_DICT)
 #define BITECS_COMPONENTS_CHUNK_ALIGN 16
 
-typedef struct
+typedef _BITECS_NODISCARD struct
 {
     bitecs_generation_t generation;
     bitecs_index_t index;
@@ -92,16 +92,15 @@ typedef struct {
 _BITECS_NODISCARD
 bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta);
 
-typedef bool (*bitecs_RangeCreator)(void* udata, bitecs_comp_id_t id, void* begin, bitecs_index_t count);
+// TODO: accept "first EntityPtr" here
+typedef void (*bitecs_ComponentsRangeHandler)(void* udata, void** begins, bitecs_index_t count);
 
 _BITECS_NODISCARD
 bool bitecs_entt_create(
     bitecs_registry* reg, bitecs_index_t count,
     bitecs_EntityPtr* first,
     const int* comps, int ncomps,
-    bitecs_RangeCreator creator, void* udata);
-
-typedef void (*bitecs_SingleCreator)(void* udata, bitecs_comp_id_t id, void* component);
+    bitecs_ComponentsRangeHandler creator, void* udata);
 
 _BITECS_NODISCARD
 bool bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr);
@@ -115,22 +114,21 @@ bool bitecs_entt_remove_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bi
 _BITECS_NODISCARD
 void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
 
-typedef void (*bitecs_RangeSystem)(void* udata, void** begins, bitecs_index_t count);
 
 void bitecs_system_run(
     bitecs_registry* reg,
     const int* components, int ncomps,
-    bitecs_RangeSystem system, void* udata);
+    bitecs_ComponentsRangeHandler system, void* udata);
 
 _BITECS_NODISCARD
 bool bitecs_check_components(bitecs_registry* reg, const int* components, int ncomps);
 
 typedef struct
 {
-    void** ptrStorage; //should have space for ncomps: void*
+    void** ptrStorage; //should have space for void*[ncomps]
     const int* components;
     int ncomps;
-    bitecs_RangeSystem system;
+    bitecs_ComponentsRangeHandler system;
     void* udata;
     bitecs_SparseMask query;
     bitecs_Ranks ranks;

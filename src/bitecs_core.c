@@ -152,7 +152,9 @@ static index_t select_up_to_chunk(component_list* list, index_t begin, index_t c
 {
     index_t chunk = begin >> components_shift(list);
     index_t i = begin & fill_up_to(components_shift(list));
-    *outBegin = (char*)list->chunks[chunk] + i * list->meta.typesize;
+    char* chunkBegin = list->chunks[chunk];
+    assert(chunkBegin && "Entity mask says component exists. It does not");
+    *outBegin = chunkBegin + i * list->meta.typesize;
     index_t chunkTail = components_in_chunk(list) - i;
     return count > chunkTail ? chunkTail : count;
 }
@@ -178,7 +180,7 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
     return end != reg->entities_count;
 }
 
-void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, bitecs_RangeSystem system, void *udata)
+void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, bitecs_ComponentsRangeHandler system, void *udata)
 {
     if (unlikely(!ncomps)) return;
     bitecs_SystemStepCtx ctx = {0};
@@ -221,12 +223,12 @@ static bool reserve_chunks(component_list* list, index_t index, index_t count)
             memcpy(newChunks, list->chunks, sizeof(void*) * list->nchunks);
             free(list->chunks);
         }
-        memset(newChunks, 0, sizeof(void*) * (newSize - list->nchunks));
+        memset(newChunks + list->nchunks, 0, sizeof(void*) * (newSize - list->nchunks));
         if (list->nalives) {
             memcpy(newAlives, list->nalives, sizeof(index_t) * list->nchunks);
             free(list->nalives);
         }
-        memset(newAlives, 0, sizeof(index_t) * (newSize - list->nchunks));
+        memset(newAlives + list->nchunks, 0, sizeof(index_t) * (newSize - list->nchunks));
         list->chunks = newChunks;
         list->nalives = newAlives;
         list->nchunks = newSize;
@@ -235,15 +237,13 @@ static bool reserve_chunks(component_list* list, index_t index, index_t count)
 }
 
 
-static bool component_add_range(component_list* list, index_t* index, index_t* count, void** begin, index_t* added)
+static bool component_add_range(component_list* list, index_t index, index_t count, void** begin, index_t* added)
 {
-    if (!*count) return false;
-    index_t chunk = *index >> components_shift(list);
-    index_t i = *index & fill_up_to(components_shift(list));
+    if (!count) return false;
+    index_t chunk = index >> components_shift(list);
+    index_t i = index & fill_up_to(components_shift(list));
     index_t diff = components_in_chunk(list) - i;
-    diff = diff > *count ? *count : diff;
-    *count -= diff;
-    *index += diff;
+    diff = diff > count ? count : diff;
     if (unlikely(!list->chunks[chunk])) {
         list->chunks[chunk] = aligned_alloc(BITECS_COMPONENTS_CHUNK_ALIGN, chunk_sizeof(list));
         if (unlikely(!list->chunks[chunk])) {
@@ -270,12 +270,11 @@ void *bitecs_entt_add_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bite
         if (!bitecs_mask_set((SparseMask*)e, id, true)) return NULL;
         if (wasComponents == e->components) return NULL;
     }
-    index_t index = ptr.index;
-    index_t count = 1;
     void* begin = NULL;
     index_t added;
-    if (reserve_chunks(list, index, count)) {
-        (void)component_add_range(list, &index, &count, &begin, &added);
+    if (reserve_chunks(list, ptr.index, 1)) {
+        // no need to check here! begin wont get reassigned
+        (void)component_add_range(list, ptr.index, 1, &begin, &added);
     }
     if (unlikely(!begin)) {
         e->dict = wasDict;
@@ -337,7 +336,7 @@ bool bitecs_entt_create(
     bitecs_registry *reg, index_t count,
     bitecs_EntityPtr *first,
     const int* comps, int ncomps,
-    bitecs_RangeCreator creator, void* udata)
+    bitecs_ComponentsRangeHandler creator, void* udata)
 {
     index_t found;
     if (!take_free(&reg->freeList, count, &found)) {
@@ -346,6 +345,12 @@ bool bitecs_entt_create(
         }
         found = reg->entities_count;
     }
+    for (int i = 0; i < ncomps; ++i) {
+        int comp = comps[i];
+        component_list* list = reg->components[comp];
+        if (unlikely(!list)) return false;
+        if (unlikely(!reserve_chunks(list, found, count))) return false;
+    }
     SparseMask mask;
     if (unlikely(!bitecs_mask_from_array(&mask, comps, ncomps))) return false;
     for (index_t i = found; i < found + count; ++i) {
@@ -353,20 +358,23 @@ bool bitecs_entt_create(
         reg->entities[i].dict = mask.dict;
         reg->entities[i].generation = reg->generation;
     }
-    for (int i = 0; i < ncomps; ++i) {
-        int comp = comps[i];
-        component_list* list = reg->components[comp];
-        if (unlikely(!list)) return false;
-        if (unlikely(!reserve_chunks(list, found, count))) return false;
-        index_t cursor_index = found;
-        index_t cursor_count = count;
-        void* begin;
-        index_t added;
-        while(component_add_range(list, &cursor_index, &cursor_count, &begin, &added)) {
-            creator(udata, comp, begin, added);
+    index_t cursor = found;
+    void** begins = alloca(sizeof(void*) * ncomps);
+    while (count) {
+        index_t smallestRange = count;
+        for (int i = 0; i < ncomps; ++i) {
+            int comp = comps[i];
+            component_list* list = reg->components[comp];
+            index_t added;
+            bool ok = component_add_range(list, cursor, count, begins + i, &added);
+            if (unlikely(!ok)) return false; // already created leak here?
+            smallestRange = added < smallestRange ? added : smallestRange;
         }
+        creator(udata, begins, smallestRange); // if ok
+        count -= smallestRange;
+        cursor += smallestRange;
+        reg->entities_count += smallestRange;
     }
-    reg->entities_count += count;
     if (first) {
         *first = (bitecs_EntityPtr){reg->generation, found};
     }

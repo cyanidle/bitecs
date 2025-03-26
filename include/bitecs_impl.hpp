@@ -3,6 +3,7 @@
 #include "bitecs_core.h"
 #include <array>
 #include <exception>
+#include <utility>
 
 namespace bitecs
 {
@@ -32,6 +33,18 @@ template<> struct bitecs::component_info<T> { \
 
 namespace bitecs::impl
 {
+
+template<typename...Comps>
+constexpr bool no_duplicates() {
+    int res[] = {component_id<Comps>...};
+    for (int i: res) {
+        int hits = 0;
+        for (int j: res) {
+            if (i == j && ++hits > 1) return false;
+        }
+    }
+    return true;
+}
 
 constexpr int count_groups(const int* comps, int ncomps) {
     bool groups[BITECS_MAX_COMPONENTS] = {};
@@ -70,7 +83,7 @@ struct system_thunk;
 template<typename Fn, typename...Comps, size_t...Is>
 struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
 {
-    static void call(void* udata, void** begins, bitecs_index_t count)
+    static void call(void* udata, void** begins, index_t count)
     {
         Fn& f = *static_cast<Fn*>(udata);
         for (size_t i = 0; i < count; ++i) {
@@ -86,27 +99,26 @@ void deleter_for(void* begin, index_t count) {
     }
 }
 
-
-template<typename Comp>
-static inline bool try_create_single(void* data, bitecs_comp_id_t id, void* out) {
-    if (component_id<Comp> == id) {
-        new (out) Comp(std::move(*static_cast<Comp*>(data)));
-        return true;
-    }
-    return false;
-}
-
 template<typename, typename...>
 struct single_creator;
 template<typename...Comps, size_t...Is>
 struct single_creator<std::index_sequence<Is...>, Comps...> {
-    static bool call(void* udata, bitecs_comp_id_t id, void* begin, bitecs_index_t) noexcept
+    static void call(void* udata, void** outs, index_t)
     {
-        try {
-            (void)(try_create_single<Comps>(static_cast<void**>(udata)[Is], id, begin) || ...);
-            return true;
-        } catch (...) {
-            return false; //return err?
+        void** sources = static_cast<void**>(udata);
+        ((new (outs[Is]) Comps(std::move(*static_cast<Comps*>(sources[Is])))), ...);
+    }
+};
+
+template<typename, typename, typename...>
+struct multi_creator;
+template<typename Fn, typename...Comps, size_t...Is>
+struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
+    static void call(void* udata, void** outs, index_t count)
+    {
+        Fn& f = *static_cast<Fn*>(udata);
+        for (index_t i = 0; i < count; ++i) {
+            f((*new(static_cast<Comps*>(outs[Is]) + i) Comps{})...);
         }
     }
 };
