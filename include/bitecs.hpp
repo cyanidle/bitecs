@@ -144,31 +144,35 @@ TEST_CASE("Basic entt operations")
     reg.DefineComponent<Component1>(bitecs_freq3);
     reg.DefineComponent<Component2>(bitecs_freq5);
     const auto counts = {1, 2, 10, 100, 200, 1000, 30000};
-    // SUBCASE ("Simple") {
-    //     const auto c1_0 = Component1{1, 2};
-    //     const auto c1_1 = Component1{200, 300};
-    //     const auto c2_0 = Component2{2.5, 7.5};
-    //     const auto c2_1 = Component2{5.5, 10.5};
-    //     reg.Entt(c1_0, c2_0);
-    //     reg.Entt(c1_0, c2_0);
-    //     reg.Entt(c1_1);
-    //     reg.Entt(c2_1);
-    //     int iter = 0;
-    //     reg.System<Component1>().Run([&](Component1& c1){
-    //         iter++;
-    //     });
-    //     CHECK(iter == 3);
-    //     iter = 0;
-    //     reg.System<Component2>().Run([&](Component2& c2){
-    //         iter++;
-    //     });
-    //     CHECK(iter == 3);
-    //     iter = 0;
-    //     reg.System<Component1, Component2>().Run([&](Component1& c1, Component2& c2){
-    //         iter++;
-    //     });
-    //     CHECK(iter == 2);
-    // }
+    SUBCASE ("Simple") {
+        const auto c1_0 = Component1{1, 2};
+        const auto c1_1 = Component1{200, 300};
+        const auto c2_0 = Component2{2.5, 7.5};
+        const auto c2_1 = Component2{5.5, 10.5};
+        int prev_counts = 1;
+        for (int i: counts) {
+            (void)reg.Entt(c1_0, c2_0);
+            (void)reg.Entt(c1_1);
+            (void)reg.Entt(c1_0, c2_0);
+            (void)reg.Entt(c2_1);
+            int iter = 0;
+            reg.System<Component1>().Run([&](EntityPtr ptr, Component1& c1){
+                iter++;
+            });
+            CHECK(iter == 3 * prev_counts);
+            iter = 0;
+            reg.System<Component2>().Run([&](EntityPtr ptr, Component2& c2){
+                iter++;
+            });
+            CHECK(iter == 3 * prev_counts);
+            iter = 0;
+            reg.System<Component1, Component2>().Run([&](EntityPtr ptr, Component1& c1, Component2& c2){
+                iter++;
+            });
+            CHECK(iter == 2 * prev_counts);
+            prev_counts++;
+        }
+    }
     SUBCASE ("Create multi") {
         Registry reg;
         reg.DefineComponent<Component1>(bitecs_freq3);

@@ -161,9 +161,9 @@ static index_t select_up_to_chunk(component_list* list, index_t begin, index_t c
 
 bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
 {
-    index_t begin = bitecs_query_match(ctx->cursor, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count - ctx->cursor);
+    index_t begin = bitecs_query_match(ctx->cursor, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count);
     if (unlikely(begin == reg->entities_count)) return false;
-    index_t end = bitecs_query_miss(begin, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count - begin);
+    index_t end = bitecs_query_miss(begin, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count);
     bitecs_CallbackContext cb_ctx;
     while (end > begin) {
         index_t count = end - begin;
