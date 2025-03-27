@@ -67,8 +67,6 @@ struct SystemProxy
     }
 };
 
-using EntityPtrBatch = std::unique_ptr<EntityPtr[]>;
-
 struct Registry
 {
     bitecs_registry* reg;
@@ -101,50 +99,28 @@ struct Registry
     EntityPtr Entt(Comps...comps) {
         constexpr Components<Comps...> c;
         EntityPtr res;
-        void* temp[] = {&comps...};
-        constexpr auto* creator = impl::single_creator<std::index_sequence_for<Comps...>, Comps...>::call;
-        if (!bitecs_entt_create(reg, 1, &res, c.data(), c.size(), creator, &temp)) {
+        void* temp[] = {&res, &comps...};
+        using seq = std::index_sequence_for<Comps...>;
+        using creator = impl::single_creator<seq, Comps...>;
+        if (!bitecs_entt_create(reg, 1, c.data(), c.size(), creator::call, &temp)) {
             throw std::runtime_error("Could not create entts");
         }
         return res;
     }
     template<typename FirstComp, typename...OtherComps, typename Fn>
-    void Entts(EntityPtrBatch* outBatch, index_t count, Fn&& populate) {
+    void Entts(index_t count, Fn&& populate) {
         constexpr Components<FirstComp, OtherComps...> c;
-        EntityPtr res;
-        constexpr auto* creator = impl::multi_creator<Fn, std::index_sequence_for<FirstComp, OtherComps...>, FirstComp, OtherComps...>::call;
-        if (!bitecs_entt_create(reg, count, &res, c.data(), c.size(), creator, &populate)) {
+        using seq = std::index_sequence_for<FirstComp, OtherComps...>;
+        using creator = impl::multi_creator<Fn, seq, FirstComp, OtherComps...>;
+        if (!bitecs_entt_create(reg, count, c.data(), c.size(), creator::call, &populate)) {
             throw std::runtime_error("Could not create entts");
         }
-        if (outBatch) {
-            *outBatch = std::make_unique<EntityPtr[]>(count);
-            for (index_t i = 0; i < count; ++i) {
-                (*outBatch)[i].index = res.index + i;
-                (*outBatch)[i].generation = res.generation;
-            }
-        }
-    }
-    template<typename FirstComp, typename...OtherComps, typename Fn>
-    void Entts(index_t count, Fn&& populate) {
-        Entts<FirstComp, OtherComps...>(nullptr, count, std::forward<Fn>(populate));
-    }
-    template<typename FirstComp, typename...OtherComps, typename Fn>
-    void Entts(EntityPtrBatch& outBatch, index_t count, Fn&& populate) {
-        Entts<FirstComp, OtherComps...>(&outBatch, count, std::forward<Fn>(populate));
-    }
-    template<typename...Comps>
-    void EnttsFromArrays(EntityPtrBatch* outBatch, index_t count, const Comps*...init) {
-        return Entts<Comps...>(outBatch, count, [&](Comps&...out){
-            ((out = Comps(*init++)), ...);
-        });
     }
     template<typename...Comps>
     void EnttsFromArrays(index_t count, const Comps*...init) {
-        EnttsFromArrays(nullptr, count, init...);
-    }
-    template<typename...Comps>
-    void EnttsFromArrays(EntityPtrBatch& outBatch, index_t count, const Comps*...init) {
-        EnttsFromArrays(&outBatch, count, init...);
+        return Entts<Comps...>(count, [&](Comps&...out){
+            ((out = Comps(*init++)), ...);
+        });
     }
 };
 
@@ -194,11 +170,14 @@ TEST_CASE("Basic entt operations")
     //     CHECK(iter == 2);
     // }
     SUBCASE ("Create multi") {
+        Registry reg;
+        reg.DefineComponent<Component1>(bitecs_freq3);
+        reg.DefineComponent<Component2>(bitecs_freq5);
         int prev_counts = 0;
         for (int count: counts) {
             CAPTURE(count);
             int iter = 0;
-            reg.Entts<Component1, Component2>(count, [&](Component1& c1, Component2& c2){
+            reg.Entts<Component1, Component2>(count, [&](EntityPtr ptr, Component1& c1, Component2& c2){
                 iter++;
                 c1.a = iter;
                 c1.b = iter * 2;
@@ -225,6 +204,7 @@ TEST_CASE("Basic entt operations")
         }
     }
     SUBCASE ("Create from array") {
+        int prev_counts = 0;
         for (int count: counts) {
             CAPTURE(count);
             std::vector<Component1> c1(count);
@@ -240,7 +220,8 @@ TEST_CASE("Basic entt operations")
             reg.System<Component1, Component2>().Run([&](Component1& c1, Component2& c2){
                 iter++;
             });
-            CHECK(iter == count);
+            CHECK(iter == count + prev_counts);
+            prev_counts += count;
         }
     }
 }

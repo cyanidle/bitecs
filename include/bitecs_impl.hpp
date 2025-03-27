@@ -15,6 +15,7 @@ using generation_t = bitecs_generation_t;
 using comp_id_t = bitecs_comp_id_t;
 using Entity = bitecs_Entity;
 using EntityPtr = bitecs_EntityPtr;
+using CallbackContext = bitecs_CallbackContext;
 
 template<typename T>
 struct component_info {
@@ -77,21 +78,6 @@ constexpr std::array<int, sizeof...(Comps)> prepare_comps()
     return res;
 }
 
-
-template<typename, typename, typename...>
-struct system_thunk;
-template<typename Fn, typename...Comps, size_t...Is>
-struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
-{
-    static void call(void* udata, void** begins, index_t count)
-    {
-        Fn& f = *static_cast<Fn*>(udata);
-        for (size_t i = 0; i < count; ++i) {
-            f(*(static_cast<Comps*>(begins[Is]) + i)...);
-        }
-    }
-};
-
 template<typename T>
 void deleter_for(void* begin, index_t count) {
     for (index_t i = 0; i < count; ++i) {
@@ -99,14 +85,39 @@ void deleter_for(void* begin, index_t count) {
     }
 }
 
+
+template<typename, typename, typename...>
+struct system_thunk;
+template<typename Fn, typename...Comps, size_t...Is>
+struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
+{
+    static void call(void* udata, CallbackContext* ctx, void** outs, index_t count)
+    {
+        Fn& f = *static_cast<Fn*>(udata);
+        EntityPtr ptr;
+        for (size_t i = 0; i < count; ++i) {
+            ptr.generation = ctx->entts[i].generation;
+            ptr.index = ctx->beginIndex + i;
+            if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
+                f(ptr, *(static_cast<Comps*>(outs[Is]) + i)...);
+            } else {
+                f(*(static_cast<Comps*>(outs[Is]) + i)...);
+            }
+        }
+    }
+};
+
 template<typename, typename...>
 struct single_creator;
 template<typename...Comps, size_t...Is>
 struct single_creator<std::index_sequence<Is...>, Comps...> {
-    static void call(void* udata, void** outs, index_t)
+    static void call(void* udata, CallbackContext* ctx, void** outs, index_t)
     {
         void** sources = static_cast<void**>(udata);
-        ((new (outs[Is]) Comps(std::move(*static_cast<Comps*>(sources[Is])))), ...);
+        auto* eptr = static_cast<EntityPtr*>(sources[0]);
+        eptr->generation = ctx->entts->generation;
+        eptr->index = ctx->beginIndex;
+        ((new (outs[Is]) Comps(std::move(*static_cast<Comps*>(sources[Is + 1])))), ...);
     }
 };
 
@@ -114,11 +125,18 @@ template<typename, typename, typename...>
 struct multi_creator;
 template<typename Fn, typename...Comps, size_t...Is>
 struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
-    static void call(void* udata, void** outs, index_t count)
+    static void call(void* udata, CallbackContext* ctx, void** outs, index_t count)
     {
         Fn& f = *static_cast<Fn*>(udata);
+        EntityPtr ptr;
         for (index_t i = 0; i < count; ++i) {
-            f((*new(static_cast<Comps*>(outs[Is]) + i) Comps{})...);
+            ptr.generation = ctx->entts[i].generation;
+            ptr.index = ctx->beginIndex + i;
+            if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
+                f(ptr, (*new(static_cast<Comps*>(outs[Is]) + i) Comps{})...);
+            } else {
+                f((*new(static_cast<Comps*>(outs[Is]) + i) Comps{})...);
+            }
         }
     }
 };

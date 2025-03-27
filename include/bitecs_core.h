@@ -92,15 +92,18 @@ typedef struct {
 _BITECS_NODISCARD
 bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta);
 
-// TODO: accept "first EntityPtr" here
-typedef void (*bitecs_ComponentsRangeHandler)(void* udata, void** begins, bitecs_index_t count);
+typedef struct {
+    bitecs_index_t beginIndex;
+    const bitecs_Entity* entts;
+} bitecs_CallbackContext;
+
+typedef void (*bitecs_Callback)(void* udata, bitecs_CallbackContext* ctx, void** begins, bitecs_index_t count);
 
 _BITECS_NODISCARD
 bool bitecs_entt_create(
     bitecs_registry* reg, bitecs_index_t count,
-    bitecs_EntityPtr* first,
     const int* comps, int ncomps,
-    bitecs_ComponentsRangeHandler creator, void* udata);
+    bitecs_Callback creator, void* udata);
 
 _BITECS_NODISCARD
 bool bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr);
@@ -118,7 +121,7 @@ void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bite
 void bitecs_system_run(
     bitecs_registry* reg,
     const int* components, int ncomps,
-    bitecs_ComponentsRangeHandler system, void* udata);
+    bitecs_Callback system, void* udata);
 
 _BITECS_NODISCARD
 bool bitecs_check_components(bitecs_registry* reg, const int* components, int ncomps);
@@ -128,7 +131,7 @@ typedef struct
     void** ptrStorage; //should have space for void*[ncomps]
     const int* components;
     int ncomps;
-    bitecs_ComponentsRangeHandler system;
+    bitecs_Callback system;
     void* udata;
     bitecs_SparseMask query;
     bitecs_Ranks ranks;

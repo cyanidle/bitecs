@@ -32,8 +32,8 @@ static void components_destroy(component_list* list)
 {
     if (!list) return;
     for (size_t i = 0; i < list->nchunks; ++i) {
-        if (list->chunks[i]) {
-            void* chunk = list->chunks[i];
+        void* chunk = list->chunks[i];
+        if (chunk) {
             if (list->meta.deleter) {
                 list->meta.deleter(chunk, components_in_chunk(list));
             }
@@ -164,6 +164,7 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
     index_t begin = bitecs_query_match(ctx->cursor, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count - ctx->cursor);
     if (unlikely(begin == reg->entities_count)) return false;
     index_t end = bitecs_query_miss(begin, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count - begin);
+    bitecs_CallbackContext cb_ctx;
     while (end > begin) {
         index_t count = end - begin;
         index_t smallestRange = ~(index_t)0;
@@ -173,14 +174,16 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
             index_t selected = select_up_to_chunk(reg->components[comp], begin, count, begins++);
             smallestRange = selected < smallestRange ? selected : smallestRange;
         }
-        ctx->system(ctx->udata, ctx->ptrStorage, smallestRange);
+        cb_ctx.beginIndex = begin;
+        cb_ctx.entts = reg->entities + begin;
+        ctx->system(ctx->udata, &cb_ctx, ctx->ptrStorage, smallestRange);
         begin += smallestRange;
     }
     ctx->cursor = end;
     return end != reg->entities_count;
 }
 
-void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, bitecs_ComponentsRangeHandler system, void *udata)
+void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, bitecs_Callback system, void *udata)
 {
     if (unlikely(!ncomps)) return;
     bitecs_SystemStepCtx ctx = {0};
@@ -207,11 +210,9 @@ static Entity* deref(Entity* entts, index_t count, bitecs_EntityPtr ptr)
 
 static bool reserve_chunks(component_list* list, index_t index, index_t count)
 {
-    index_t chunk = index >> components_shift(list);
-    index_t totalChunks = count >> components_shift(list);
-    index_t upto = chunk + totalChunks;
-    if (list->nchunks <= upto) {
-        index_t newSize = upto + 1;
+    index_t chunk = (index + count) >> components_shift(list);
+    if (list->nchunks <= chunk) {
+        index_t newSize = chunk + 1;
         void** newChunks = malloc(sizeof(void*) * newSize);
         if (!newChunks) return false;
         index_t* newAlives = malloc(sizeof(index_t) * newSize);
@@ -255,7 +256,7 @@ static bool component_add_range(component_list* list, index_t index, index_t cou
     list->nalives[chunk] += diff;
     *begin = (char*)list->chunks[chunk] + i * list->meta.typesize;
     *added = diff;
-    return true; //does it need another iter
+    return true;
 }
 
 void *bitecs_entt_add_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
@@ -334,9 +335,8 @@ static bool reserve_entts(bitecs_registry *reg, index_t count)
 
 bool bitecs_entt_create(
     bitecs_registry *reg, index_t count,
-    bitecs_EntityPtr *first,
     const int* comps, int ncomps,
-    bitecs_ComponentsRangeHandler creator, void* udata)
+    bitecs_Callback creator, void* udata)
 {
     index_t found;
     if (!take_free(&reg->freeList, count, &found)) {
@@ -360,6 +360,7 @@ bool bitecs_entt_create(
     }
     index_t cursor = found;
     void** begins = alloca(sizeof(void*) * ncomps);
+    bitecs_CallbackContext ctx;
     while (count) {
         index_t smallestRange = count;
         for (int i = 0; i < ncomps; ++i) {
@@ -370,13 +371,12 @@ bool bitecs_entt_create(
             if (unlikely(!ok)) return false; // already created leak here?
             smallestRange = added < smallestRange ? added : smallestRange;
         }
-        creator(udata, begins, smallestRange); // if ok
+        ctx.entts = reg->entities + cursor;
+        ctx.beginIndex = cursor;
+        creator(udata, &ctx, begins, smallestRange);
         count -= smallestRange;
         cursor += smallestRange;
         reg->entities_count += smallestRange;
-    }
-    if (first) {
-        *first = (bitecs_EntityPtr){reg->generation, found};
     }
     return true;
 }
