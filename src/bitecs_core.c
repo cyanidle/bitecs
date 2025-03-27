@@ -115,6 +115,7 @@ struct bitecs_registry
 
 bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta)
 {
+    assert(meta.typesize > 0);
     if (reg->components[id]) return false;
     reg->components[id] = components_new(meta);
     return (bool)reg->components[id];

@@ -128,43 +128,52 @@ TEST_CASE("Basic entt operations")
 {
     struct Component1 {
         enum {
-            bitecs_id = 1,
+            bitecs_id = 101,
         };
         int a;
         int b;
     };
     struct Component2 {
         enum {
-            bitecs_id = 3,
+            bitecs_id = 303,
         };
         float a;
         float b;
     };
+    struct Component3 {
+        enum {
+            bitecs_id = 1303,
+        };
+    };
     Registry reg;
     reg.DefineComponent<Component1>(bitecs_freq3);
     reg.DefineComponent<Component2>(bitecs_freq5);
+    reg.DefineComponent<Component3>(bitecs_rare);
     const auto counts = {1, 2, 10, 100, 200, 1000, 30000};
     SUBCASE ("Simple") {
-        const auto c1_0 = Component1{1, 2};
-        const auto c1_1 = Component1{200, 300};
-        const auto c2_0 = Component2{2.5, 7.5};
-        const auto c2_1 = Component2{5.5, 10.5};
         int prev_counts = 1;
         for (int i: counts) {
-            (void)reg.Entt(c1_0, c2_0);
-            (void)reg.Entt(c1_1);
-            (void)reg.Entt(c1_0, c2_0);
-            (void)reg.Entt(c2_1);
+            (void)reg.Entt(Component1{}, Component2{});
+            (void)reg.Entt(Component3{});
+            (void)reg.Entt(Component1{}, Component3{});
+            (void)reg.Entt(Component1{}, Component2{});
+            (void)reg.Entt(Component2{});
             int iter = 0;
             reg.System<Component1>().Run([&](EntityPtr ptr, Component1& c1){
-                iter++;
+               iter++;
             });
             CHECK(iter == 3 * prev_counts);
             iter = 0;
+            // First two c2`s not selected???
             reg.System<Component2>().Run([&](EntityPtr ptr, Component2& c2){
-                iter++;
+               iter++;
             });
             CHECK(iter == 3 * prev_counts);
+            iter = 0;
+            reg.System<Component3>().Run([&](EntityPtr ptr, Component3& c3){
+                iter++;
+            });
+            CHECK(iter == 2 * prev_counts);
             iter = 0;
             reg.System<Component1, Component2>().Run([&](EntityPtr ptr, Component1& c1, Component2& c2){
                 iter++;

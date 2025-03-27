@@ -28,7 +28,7 @@ typedef int bitecs_comp_id_t;
 #define BITECS_MAX_COMPONENTS (BITECS_GROUP_SIZE * BITECS_BITS_IN_DICT)
 #define BITECS_COMPONENTS_CHUNK_ALIGN 16
 
-typedef _BITECS_NODISCARD struct
+typedef struct
 {
     bitecs_generation_t generation;
     bitecs_index_t index;
