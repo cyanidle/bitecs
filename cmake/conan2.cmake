@@ -610,7 +610,7 @@ macro(_construct_profile_argument argument_variable profile_list)
     unset(_profile_list)
 endmacro()
 
-macro(conan2_install)
+macro(_conan2_install)
     set_property(GLOBAL PROPERTY CONAN_PROVIDE_DEPENDENCY_INVOKED TRUE)
     get_property(_conan_install_success GLOBAL PROPERTY CONAN_INSTALL_SUCCESS)
     if(NOT _conan_install_success)
@@ -661,3 +661,5 @@ if(NOT _cmake_program)
 endif()
 
 cmake_policy(POP)
+
+_conan2_install()

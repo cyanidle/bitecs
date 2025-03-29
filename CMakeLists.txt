@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(bitecs C CXX)
 
-if (NOT CONAN_CALLED)
+if (NOT CONAN_BUILDING)
+    set(CONAN_INSTALL_ARGS "--build=missing;-o;bench=True" CACHE STRING "Override default conan opts")
     include(cmake/conan2.cmake)
-    conan2_install()
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
