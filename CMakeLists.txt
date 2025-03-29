@@ -21,7 +21,7 @@ CPMAddPackage("gh:doctest/doctest@2.4.11")
 add_library(bitecs INTERFACE)
 target_link_libraries(bitecs INTERFACE bitecs-core doctest::doctest)
 add_library(bitecs::bitecs ALIAS bitecs)
-add_library(bitecs::core ALIAS bitecs_core)
+add_library(bitecs::core ALIAS bitecs-core)
 
 if (BITECS_TEST)
     enable_testing()
