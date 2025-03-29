@@ -409,9 +409,10 @@ function(_detect_host_profile output_file)
     if(compiler_runtime_type)
         string(APPEND profile compiler.runtime_type=${compiler_runtime_type} "\n")
     endif()
-    if(compiler_cppstd)
-        string(APPEND profile compiler.cppstd=${compiler_cppstd} "\n")
+    if (NOT compiler_cppstd)
+        set(compiler_cppstd 17)
     endif()
+    string(APPEND profile compiler.cppstd=${compiler_cppstd} "\n")
     if(compiler_libcxx)
         string(APPEND profile compiler.libcxx=${compiler_libcxx} "\n")
     endif()
@@ -527,27 +528,6 @@ function(_conan_install)
 
 endfunction()
 
-macro(_conan_check_executable)
-    find_program(CONAN_COMMAND "conan")
-    if (NOT CONAN_COMMAND)
-        find_package(Python3 COMPONENTS Interpreter REQUIRED)
-        message(WARNING "CMake-Conan: installing conan using pip")
-        execute_process(COMMAND ${Python3_EXECUTABLE} -m pip install conan
-            ECHO_ERROR_VARIABLE
-            COMMAND_ERROR_IS_FATAL ANY)
-        find_program(CONAN_COMMAND "conan" REQUIRED)
-    endif()
-    execute_process(COMMAND ${CONAN_COMMAND} version
-        ECHO_ERROR_VARIABLE
-        OUTPUT_VARIABLE _conan_tool_ver
-        COMMAND_ERROR_IS_FATAL ANY)
-    string(REGEX MATCH "^version: ([0-9]+)." _conan_tool_ver "${_conan_tool_ver}")
-    if (NOT CMAKE_MATCH_1 STREQUAL 2)
-        message(FATAL_ERROR "Conan: major version 2 expected")
-    endif()
-    unset(_conan_tool_ver)
-endmacro()
-
 function(_conan_check_remote name url)
     execute_process(COMMAND ${CONAN_COMMAND} remote list
         OUTPUT_VARIABLE remotes
@@ -634,7 +614,7 @@ macro(conan2_install)
     set_property(GLOBAL PROPERTY CONAN_PROVIDE_DEPENDENCY_INVOKED TRUE)
     get_property(_conan_install_success GLOBAL PROPERTY CONAN_INSTALL_SUCCESS)
     if(NOT _conan_install_success)
-        _conan_check_executable()
+        find_program(CONAN_COMMAND "conan")
         _conan_get_version(${CONAN_COMMAND} CONAN_CURRENT_VERSION)
         _conan_version_check(MINIMUM ${CONAN_MINIMUM_VERSION} CURRENT ${CONAN_CURRENT_VERSION})
         message(STATUS "CMake-Conan: Installing dependencies with Conan")
