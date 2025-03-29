@@ -33,12 +33,15 @@ class BitECS(ConanFile):
             self.test_requires("entt/3.14.0")
             self.test_requires("entityx/1.3.0")
             self.test_requires("gaia-ecs/0.8.6")
+            self.test_requires("fastprng/cci.20200628")
+            self.test_requires("gsl-lite/0.42.0")
 
     def generate(self):
         deps = CMakeDeps(self)
         deps.generate()
-        tc = CMakeToolchain(self)
+        tc = CMakeToolchain(self )
         tc.user_presets_path = ""
+        tc.variables["BITECS_BENCH"] = bool(self.options.bench)
         tc.generate()
 
     def layout(self):

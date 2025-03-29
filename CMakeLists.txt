@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 17)
 
 option(BITECS_TEST "Build tests" OFF)
+option(BITECS_BENCH "Build bench" OFF)
 
 add_library(bitecs-core
     src/bitecs_core.c
@@ -28,16 +29,36 @@ add_library(bitecs::bitecs ALIAS bitecs)
 add_library(bitecs::core ALIAS bitecs-core)
 
 if (BITECS_TEST)
-    find_package(GTest REQUIRED)
-    find_package(benchmark REQUIRED)
+    message(STATUS "Building tests")
     enable_testing()
+
+    find_package(GTest REQUIRED)
 
     add_executable(bitecs_test test.cpp)
     target_link_libraries(bitecs_test PRIVATE bitecs GTest::gtest_main)
     add_test(NAME bitecs_test COMMAND $<TARGET_FILE:bitecs_test>)
 
-    add_executable(bitecs_bench test.cpp)
-    target_link_libraries(bitecs_bench PRIVATE bitecs benchmark::benchmark_main)
+endif()
+
+if (BITECS_BENCH)
+    message(STATUS "Building benchmarks")
+    find_package(benchmark REQUIRED)
+    find_package(gsl-lite REQUIRED)
+    find_package(flecs REQUIRED)
+    find_package(gaia REQUIRED)
+    find_package(fastprng REQUIRED)
+    find_package(EnTT REQUIRED)
+
+    add_executable(bitecs_bench benchmark.cpp)
+    target_link_libraries(bitecs_bench PRIVATE
+        bitecs
+        benchmark::benchmark_main
+        gsl::gsl-lite
+        EnTT::EnTT
+        gaia::gaia
+        flecs::flecs_static
+        fastprng::fastprng
+    )
     add_test(NAME bitecs_bench COMMAND $<TARGET_FILE:bitecs_bench>)
 endif()
 

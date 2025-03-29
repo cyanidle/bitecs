@@ -521,6 +521,8 @@ function(_conan_install)
     set_property(GLOBAL PROPERTY CONAN_GENERATORS_FOLDER "${conan_generators_folder}")
     # reconfigure on conanfile changes
     string(JSON conanfile GET "${conan_stdout}" graph nodes 0 label)
+    string(REPLACE " " ";" conanfile "${conanfile}")
+    list(GET conanfile 0 conanfile)
     message(STATUS "CMake-Conan: CONANFILE=${CONAN2_ROOT}/${conanfile}")
     set_property(DIRECTORY ${CMAKE_SOURCE_DIR} APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CONAN2_ROOT}/${conanfile}")
     # success
