@@ -14,7 +14,10 @@ add_library(bitecs-core
     src/bitecs_private.h
 )
 target_compile_options(bitecs-core PRIVATE -fexceptions)
-target_include_directories(bitecs-core PUBLIC include)
+target_include_directories(bitecs-core PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 
 CPMAddPackage("gh:doctest/doctest@2.4.11")
 

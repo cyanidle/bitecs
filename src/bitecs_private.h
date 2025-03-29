@@ -1,7 +1,7 @@
 #ifndef BITECS_PRIVATE_H
 #define BITECS_PRIVATE_H
 
-#include "bitecs_core.h"
+#include "bitecs/bitecs_core.h"
 #include <assert.h>
 #include <limits.h>
 #include <stdlib.h>
