@@ -1,3 +1,5 @@
+// MIT License. See LICENSE file for details
+// Copyright (c) 2025 Доронин Алексей
 #ifndef BITECS_PRIVATE_H
 #define BITECS_PRIVATE_H
 

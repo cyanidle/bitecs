@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(bitecs C CXX)
 
-include(CPM.cmake)
+if (NOT CONAN_CALLED)
+    include(cmake/conan2.cmake)
+    conan2_install()
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 17)
@@ -19,18 +22,23 @@ target_include_directories(bitecs-core PUBLIC
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-CPMAddPackage("gh:doctest/doctest@2.4.11")
-
 add_library(bitecs INTERFACE)
-target_link_libraries(bitecs INTERFACE bitecs-core doctest::doctest)
+target_link_libraries(bitecs INTERFACE bitecs-core)
 add_library(bitecs::bitecs ALIAS bitecs)
 add_library(bitecs::core ALIAS bitecs-core)
 
 if (BITECS_TEST)
+    find_package(GTest REQUIRED)
+    find_package(benchmark REQUIRED)
     enable_testing()
+
     add_executable(bitecs_test test.cpp)
-    target_link_libraries(bitecs_test PRIVATE bitecs)
-    add_test(NAME basic COMMAND $<TARGET_FILE:bitecs_test>)
+    target_link_libraries(bitecs_test PRIVATE bitecs GTest::gtest_main)
+    add_test(NAME bitecs_test COMMAND $<TARGET_FILE:bitecs_test>)
+
+    add_executable(bitecs_bench test.cpp)
+    target_link_libraries(bitecs_bench PRIVATE bitecs benchmark::benchmark_main)
+    add_test(NAME bitecs_bench COMMAND $<TARGET_FILE:bitecs_bench>)
 endif()
 
 if(MSVC)
@@ -38,3 +46,8 @@ if(MSVC)
 else()
     target_compile_options(bitecs-core PRIVATE -Wall -Wextra -pedantic)
 endif()
+
+
+install(TARGETS bitecs-core bitecs)
+install(DIRECTORY include/bitecs DESTINATION include)
+install(FILES LICENSE DESTINATION .)

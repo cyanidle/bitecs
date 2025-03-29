@@ -1,3 +1,5 @@
+// MIT License. See LICENSE file for details
+// Copyright (c) 2025 Доронин Алексей
 #include "bitecs_private.h"
 
 typedef struct component_list
@@ -316,8 +318,7 @@ bool bitecs_entt_remove_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bi
     if (list->nalives[chunk]-- == 1) {
         free(list->chunks[chunk]);
     }
-    (void)bitecs_mask_set((SparseMask*)e, id, false);
-    return true;
+    return bitecs_mask_set((SparseMask*)e, id, false);
 }
 
 static bool reserve_entts(bitecs_registry *reg, index_t count)

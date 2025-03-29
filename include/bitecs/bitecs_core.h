@@ -1,4 +1,7 @@
-﻿#pragma once
+﻿// MIT License. See LICENSE file for details
+// Copyright (c) 2025 Доронин Алексей
+
+#pragma once
 
 #include <stdint.h>
 #include <stddef.h>

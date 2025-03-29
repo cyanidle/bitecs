@@ -1,3 +1,6 @@
+// MIT License. See LICENSE file for details
+// Copyright (c) 2025 Доронин Алексей
+
 #pragma once
 
 #include "bitecs_core.h"

@@ -1,3 +1,5 @@
+// MIT License. See LICENSE file for details
+// Copyright (c) 2025 Доронин Алексей
 #include "bitecs_private.h"
 
 void bitecs_ranks_get(bitecs_Ranks* res, dict_t dict)
