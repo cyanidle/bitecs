@@ -198,3 +198,4 @@ TEST_CASE("Basic Mask Operations")
 }
 
 
+// TODO: test removal + add + removal + add
