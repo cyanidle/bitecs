@@ -14,11 +14,9 @@
 extern "C" {
 #endif
 
-typedef __uint128_t bitecs_mask_t;
-typedef uint64_t bitecs_dict_t;
-typedef uint32_t bitecs_index_t;
-typedef uint32_t bitecs_generation_t;
-typedef int bitecs_comp_id_t;
+#ifndef BITECS_INDEX_T
+#define BITECS_INDEX_T uint32_t
+#endif
 
 #define BITECS_GROUP_SIZE 32
 #define BITECS_GROUP_SHIFT 5
@@ -27,6 +25,13 @@ typedef int bitecs_comp_id_t;
 #define BITECS_BITS_IN_DICT 64
 #define BITECS_MAX_COMPONENTS (BITECS_GROUP_SIZE * BITECS_BITS_IN_DICT)
 #define BITECS_COMPONENTS_CHUNK_ALIGN 16
+
+
+typedef __uint128_t bitecs_mask_t;
+typedef uint64_t bitecs_dict_t;
+typedef BITECS_INDEX_T bitecs_index_t;
+typedef uint32_t bitecs_generation_t;
+typedef int bitecs_comp_id_t;
 
 typedef struct
 {

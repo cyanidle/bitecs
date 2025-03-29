@@ -470,7 +470,6 @@ bool bitecs_registry_merge_other(bitecs_registry *reg, bitecs_registry *from)
 
 bool bitecs_registry_clone_settings(bitecs_registry *reg, bitecs_registry *out)
 {
-
     for (int i = 0; i < BITECS_MAX_COMPONENTS; ++i) {
         out->components[i] = reg->components[i];
     }
