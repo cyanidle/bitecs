@@ -448,16 +448,13 @@ void bitecs_entt_destroy_batch(bitecs_registry *reg, const bitecs_EntityPtr *ptr
     }
 }
 
-bool bitecs_entt_destroy(bitecs_registry *reg, bitecs_EntityPtr ptr)
+void bitecs_entt_destroy(bitecs_registry *reg, bitecs_EntityPtr ptr)
 {
     Entity* e = deref(reg->entities, reg->entities_count, ptr);
-    if (!e) {
-        return false;
-    }
+    if (unlikely(!e)) return;
     reg->generation++;
     e->generation = reg->generation;
     do_destroy_batch(reg, ptr.index, 1);
-    return true;
 }
 
 // clone/merge

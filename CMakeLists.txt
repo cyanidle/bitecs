@@ -6,7 +6,7 @@ include(CPM.cmake)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 17)
 
-option(BITECS_TEST "Build tests" ON)
+option(BITECS_TEST "Build tests" OFF)
 
 add_library(bitecs-core
     src/bitecs_core.c

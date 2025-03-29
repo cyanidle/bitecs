@@ -122,6 +122,14 @@ struct Registry
             ((out = std::move(*init++)), ...);
         });
     }
+
+    void Destroy(EntityPtr entt) {
+        bitecs_entt_destroy(reg, entt);
+    }
+
+    void Destroy(const EntityPtr* entt, size_t count) {
+        bitecs_entt_destroy_batch(reg, entt, count);
+    }
 };
 
 TEST_CASE("Basic entt operations")

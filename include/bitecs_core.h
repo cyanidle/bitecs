@@ -105,8 +105,7 @@ bool bitecs_entt_create(
     const int* comps, int ncomps,
     bitecs_Callback creator, void* udata);
 
-_BITECS_NODISCARD
-bool bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr);
+void bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr);
 void bitecs_entt_destroy_batch(bitecs_registry* reg, const bitecs_EntityPtr* ptrs, size_t nptrs);
 
 // returns void* to be used for initialization. or null if already exists/error
