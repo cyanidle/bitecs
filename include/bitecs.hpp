@@ -117,9 +117,9 @@ struct Registry
         }
     }
     template<typename...Comps>
-    void EnttsFromArrays(index_t count, const Comps*...init) {
+    void EnttsFromArrays(index_t count, Comps*...init) {
         return Entts<Comps...>(count, [&](Comps&...out){
-            ((out = Comps(*init++)), ...);
+            ((out = std::move(*init++)), ...);
         });
     }
 };

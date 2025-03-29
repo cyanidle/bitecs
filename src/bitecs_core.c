@@ -54,6 +54,7 @@ typedef struct FreeList
 } FreeList;
 
 
+_BITECS_NODISCARD
 static bool take_free(FreeList** _list, index_t count, index_t* outIndex) {
     FreeList* list = *_list;
     if (!list) return false;
@@ -77,6 +78,7 @@ static bool take_free(FreeList** _list, index_t count, index_t* outIndex) {
     return false;
 }
 
+_BITECS_NODISCARD
 static bool add_free(FreeList** _list, index_t index, index_t count) {
     FreeList* old = *_list;
     while(old) {
@@ -109,6 +111,7 @@ struct bitecs_registry
     FreeList* freeList;
     index_t entities_count;
     index_t entities_cap;
+    index_t total_free;
     bitecs_generation_t generation;
     component_list* components[BITECS_MAX_COMPONENTS];
 };
@@ -341,10 +344,20 @@ bool bitecs_entt_create(
 {
     index_t found;
     if (!take_free(&reg->freeList, count, &found)) {
+        // prevent always allocating cases (high fragmentation of free spaces)
+        // when total free slots is 3 times the wanted count, but could not fit -> split
+        // wanted chunks by 2
+        if (reg->total_free / count > 3) {
+            index_t pivot = count / 2;
+            return bitecs_entt_create(reg, pivot, comps, ncomps, creator, udata)
+                   && bitecs_entt_create(reg, count - pivot, comps, ncomps, creator, udata);
+        }
         if (unlikely(!reserve_entts(reg, reg->entities_count + count))) {
             return false;
         }
         found = reg->entities_count;
+    } else {
+        reg->total_free -= count;
     }
     for (int i = 0; i < ncomps; ++i) {
         int comp = comps[i];
@@ -399,7 +412,9 @@ static void do_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t c
             cursor_count -= part;
         } while(cursor_count);
     }
-    add_free(&reg->freeList, ptr, count);
+    if (likely(add_free(&reg->freeList, ptr, count))) {
+        reg->total_free += count;
+    }
 }
 
 void bitecs_entt_destroy_batch(bitecs_registry *reg, const bitecs_EntityPtr *ptrs, size_t nptrs)
