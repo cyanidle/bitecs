@@ -434,7 +434,7 @@ void bitecs_entt_destroy_batch(bitecs_registry *reg, const bitecs_EntityPtr *ptr
                 continue;
             }
             count++;
-            if (ptr->index != ptr->index + count) {
+            if (ptr->index != begin + count) {
                 do_destroy_batch(reg, begin, count);
                 count = 0;
                 begin = ptr->index;
