@@ -43,13 +43,17 @@ static bool needs_adjust(dict_t diff, const bitecs_Ranks *ranks)
 }
 
 index_t bitecs_query_match(
-    index_t cursor, const bitecs_SparseMask* query,
-    const bitecs_Ranks *ranks, const bitecs_Entity* entts, index_t count)
+    bitecs_index_t cursor, const bitecs_QueryContext* ctx,
+    const bitecs_Entity* entts, index_t count)
 {
+    bitecs_flags_t flags = ctx->flags;
+    const bitecs_SparseMask* query = &ctx->query;
+    const bitecs_Ranks* ranks = &ctx->ranks;
     for (;cursor < count; ++cursor) {
         const Entity* entt = entts + cursor;
         dict_t edict = entt->dict;
         dict_t qdict = query->dict;
+        if ((entt->flags & flags) != flags) continue;
         if ((edict & qdict) != qdict) continue;
         dict_t diff = edict ^ qdict;
         bool adjust = needs_adjust(diff, ranks);
@@ -65,14 +69,18 @@ index_t bitecs_query_match(
 }
 
 bitecs_index_t bitecs_query_miss(
-    bitecs_index_t cursor, const bitecs_SparseMask* query,
-    const bitecs_Ranks *ranks, const bitecs_Entity* entts, bitecs_index_t count)
+    bitecs_index_t cursor, const bitecs_QueryContext* ctx,
+    const bitecs_Entity* entts, bitecs_index_t count)
 {
     bitecs_SparseMask adjusted;
+    bitecs_flags_t flags = ctx->flags;
+    const bitecs_Ranks* ranks = &ctx->ranks;
+    const bitecs_SparseMask* query = &ctx->query;
     const bitecs_SparseMask* current = query;
     for (;cursor < count; ++cursor) {
         const Entity* entt = entts + cursor;
 again:
+        if ((entt->flags & flags) != flags) return cursor;
         if ((entt->dict & current->dict) != current->dict) {
             // missmatch on adjusted query is not definitive!
             if (current != query) {
@@ -144,7 +152,7 @@ bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idx
     {
         int _last = 0;
         for (int i = 0; i < idxs_count; ++i) {
-            assert(idxs[i] > 0 && "bitecs_mask_from_array(): Invalid input");
+            assert(idxs[i] >= 0 && "bitecs_mask_from_array(): Invalid input");
             assert(_last <= idxs[i] && "bitecs_mask_from_array(): Unsorted input");
             _last = idxs[i];
         }

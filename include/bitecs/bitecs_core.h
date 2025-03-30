@@ -24,7 +24,7 @@ extern "C" {
 #define BITECS_GROUP_SIZE 32
 #define BITECS_GROUP_SHIFT 5
 #define BITECS_GROUPS_COUNT 4
-#define BITECS_FREQUENCY_ADJUST 3
+#define BITECS_FREQUENCY_ADJUST 5
 #define BITECS_BITS_IN_DICT 64
 #define BITECS_MAX_COMPONENTS (BITECS_GROUP_SIZE * BITECS_BITS_IN_DICT)
 #define BITECS_COMPONENTS_CHUNK_ALIGN 16
@@ -34,6 +34,7 @@ typedef __uint128_t bitecs_mask_t;
 typedef uint64_t bitecs_dict_t;
 typedef BITECS_INDEX_T bitecs_index_t;
 typedef uint32_t bitecs_generation_t;
+typedef uint32_t bitecs_flags_t;
 typedef int bitecs_comp_id_t;
 
 typedef struct
@@ -53,8 +54,16 @@ typedef struct
     bitecs_mask_t components; // 4 groups of 16 bits
     bitecs_dict_t dict; // which groups of 32 bits are active out of 64 total
     bitecs_generation_t generation;
-    uint32_t flags; // can have "dirty" flag?
+    bitecs_flags_t flags; // user-defined flags
 } bitecs_Entity;
+
+typedef struct
+{
+    const bitecs_mask_t r_components;
+    const bitecs_dict_t r_dict;
+    const bitecs_generation_t r_generation;
+    bitecs_flags_t flags;
+} bitecs_EntityProxy;
 
 typedef struct {
     bitecs_dict_t select_dict_masks[BITECS_GROUPS_COUNT];
@@ -124,9 +133,11 @@ bool bitecs_entt_remove_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bi
 _BITECS_NODISCARD
 void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
 
+// @warning: do not store this pointer. Mey be relocated at any time.
+_BITECS_NODISCARD bitecs_EntityProxy* bitecs_entt_deref(bitecs_registry* reg, bitecs_EntityPtr ptr);
 
 void bitecs_system_run(
-    bitecs_registry* reg,
+    bitecs_registry* reg, bitecs_flags_t flags,
     const int* components, int ncomps,
     bitecs_Callback system, void* udata);
 
@@ -135,13 +146,19 @@ bool bitecs_check_components(bitecs_registry* reg, const int* components, int nc
 
 typedef struct
 {
+    bitecs_SparseMask query;
+    bitecs_Ranks ranks;
+    bitecs_flags_t flags;
+} bitecs_QueryContext;
+
+typedef struct
+{
     void** ptrStorage; //should have space for void*[ncomps]
     const int* components;
     int ncomps;
     bitecs_Callback system;
     void* udata;
-    bitecs_SparseMask query;
-    bitecs_Ranks ranks;
+    bitecs_QueryContext queryContext;
     bitecs_index_t cursor;
 } bitecs_SystemStepCtx;
 
@@ -152,14 +169,12 @@ void bitecs_ranks_get(bitecs_Ranks* out, bitecs_dict_t dict);
 
 _BITECS_NODISCARD
 bitecs_index_t bitecs_query_match(
-    bitecs_index_t cursor,
-    const bitecs_SparseMask* query, const bitecs_Ranks* ranks,
+    bitecs_index_t cursor, const bitecs_QueryContext* ctx,
     const bitecs_Entity* entts, bitecs_index_t count);
 
 _BITECS_NODISCARD
 bitecs_index_t bitecs_query_miss(
-    bitecs_index_t cursor,
-    const bitecs_SparseMask* query, const bitecs_Ranks* ranks,
+    bitecs_index_t cursor, const bitecs_QueryContext* ctx,
     const bitecs_Entity* entts, bitecs_index_t count);
 
 // idxs must be sorted!

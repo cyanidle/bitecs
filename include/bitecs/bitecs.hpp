@@ -51,10 +51,24 @@ struct SystemProxy
     {}
 
     template<typename Fn>
-    void Run(Fn&& f) {
+    using if_compatible = std::enable_if_t<std::is_invocable_v<Fn, C&...> || std::is_invocable_v<Fn, EntityPtr, C&...>, int>;
+
+
+    template<typename Fn, if_compatible<Fn> = 1>
+    void Run(bitecs_flags_t flags, Fn& f) {
         constexpr Components<C...> comps;
         constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<C...>, C...>::call;
-        bitecs_system_run(reg, comps.data(), comps.size(), system, &f);
+        bitecs_system_run(reg, flags, comps.data(), comps.size(), system, (void*)&f);
+    }
+
+    template<typename Fn, if_compatible<Fn> = 1>
+    void Run(bitecs_flags_t flags, Fn&& f) {
+        Run(flags, f);
+    }
+
+    template<typename Fn, if_compatible<Fn> = 1>
+    void Run(Fn&& f) {
+        Run(0, std::forward<Fn>(f));
     }
 };
 
@@ -73,8 +87,8 @@ struct Registry
     }
 
     template<typename T>
-    void DefineComponent(bitecs_Frequency freq) {
-        bitecs_ComponentMeta meta {sizeof(T), freq, nullptr};
+    void DefineComponent(bitecs_Frequency freq = bitecs_Frequency::bitecs_freq5) {
+        bitecs_ComponentMeta meta {impl::is_empty<T> ? 0 : sizeof(T), freq, nullptr};
         if (!std::is_trivially_destructible_v<T>) {
             meta.deleter = impl::deleter_for<T>;
         }
@@ -99,13 +113,17 @@ struct Registry
         return res;
     }
     template<typename FirstComp, typename...OtherComps, typename Fn>
-    void Entts(index_t count, Fn&& populate) {
+    void Entts(index_t count, Fn& populate) {
         constexpr Components<FirstComp, OtherComps...> c;
         using seq = std::index_sequence_for<FirstComp, OtherComps...>;
         using creator = impl::multi_creator<Fn, seq, FirstComp, OtherComps...>;
-        if (!bitecs_entt_create(reg, count, c.data(), c.size(), creator::call, &populate)) {
+        if (!bitecs_entt_create(reg, count, c.data(), c.size(), creator::call, (void*)&populate)) {
             throw std::runtime_error("Could not create entts");
         }
+    }
+    template<typename FirstComp, typename...OtherComps, typename Fn>
+    void Entts(index_t count, Fn&& populate) {
+        Entts<FirstComp, OtherComps...>(count, populate);
     }
     template<typename...Comps>
     void EnttsFromArrays(index_t count, Comps*...init) {
@@ -118,8 +136,33 @@ struct Registry
         bitecs_entt_destroy(reg, entt);
     }
 
-    void Destroy(const EntityPtr* entt, size_t count) {
+    void DestroyBatch(const EntityPtr* entt, size_t count) {
         bitecs_entt_destroy_batch(reg, entt, count);
+    }
+
+    template<typename Comp, typename...Args>
+    Comp& AddComponent(EntityPtr entt, Args&&...args) {
+        auto* c = static_cast<Comp*>(bitecs_entt_add_component(reg, entt, component_id<Comp>));
+        if (!c) {
+            throw std::runtime_error("Could not add component");
+        }
+        return *(new (c) Comp(std::forward<Args>(args)...));
+    }
+
+    template<typename Comp>
+    Comp& GetComponent(EntityPtr entt) {
+        auto* c = static_cast<Comp*>(bitecs_entt_get_component(reg, entt, component_id<Comp>));
+        if (!c) {
+            throw std::runtime_error("Could not get component");
+        }
+        return *c;
+    }
+
+    template<typename Comp>
+    void RemoveComponent(EntityPtr entt) {
+        if (!bitecs_entt_remove_component(reg, entt, component_id<Comp>)) {
+            throw std::runtime_error("Could not remove component");
+        }
     }
 };
 

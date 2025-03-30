@@ -34,7 +34,7 @@ if (BITECS_TEST)
 
     find_package(GTest REQUIRED)
 
-    add_executable(bitecs_test test.cpp)
+    add_executable(bitecs_test tests/test.cpp)
     target_link_libraries(bitecs_test PRIVATE bitecs GTest::gtest_main)
     add_test(NAME bitecs_test COMMAND $<TARGET_FILE:bitecs_test>)
 
@@ -49,7 +49,7 @@ if (BITECS_BENCH)
     find_package(fastprng REQUIRED)
     find_package(EnTT REQUIRED)
 
-    add_executable(bitecs_bench benchmark.cpp)
+    add_executable(bitecs_bench benchmarks/benchmark.cpp)
     target_link_libraries(bitecs_bench PRIVATE
         bitecs
         benchmark::benchmark_main

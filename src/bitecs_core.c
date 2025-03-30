@@ -120,7 +120,7 @@ struct bitecs_registry
 
 bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta)
 {
-    assert(meta.typesize > 0);
+    assert(meta.typesize >= 0);
     if (reg->components[id]) return false;
     reg->components[id] = components_new(meta);
     return (bool)reg->components[id];
@@ -156,6 +156,10 @@ void bitecs_registry_delete(bitecs_registry* reg)
 
 static index_t select_up_to_chunk(component_list* list, index_t begin, index_t count, void** outBegin)
 {
+    if (!list->meta.typesize) {
+        *outBegin = 0;
+        return count;
+    }
     index_t chunk = begin >> components_shift(list);
     index_t i = begin & fill_up_to(components_shift(list));
     char* chunkBegin = list->chunks[chunk];
@@ -167,9 +171,9 @@ static index_t select_up_to_chunk(component_list* list, index_t begin, index_t c
 
 bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
 {
-    index_t begin = bitecs_query_match(ctx->cursor, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count);
+    index_t begin = bitecs_query_match(ctx->cursor, &ctx->queryContext, reg->entities, reg->entities_count);
     if (unlikely(begin == reg->entities_count)) return false;
-    index_t end = bitecs_query_miss(begin, &ctx->query, &ctx->ranks, reg->entities, reg->entities_count);
+    index_t end = bitecs_query_miss(begin, &ctx->queryContext, reg->entities, reg->entities_count);
     bitecs_CallbackContext cb_ctx;
     while (end > begin) {
         index_t count = end - begin;
@@ -189,14 +193,17 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
     return end != reg->entities_count;
 }
 
-void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, bitecs_Callback system, void *udata)
+void bitecs_system_run(
+    bitecs_registry *reg, bitecs_flags_t flags,
+    const int *components, int ncomps, bitecs_Callback system, void *udata)
 {
     if (unlikely(!ncomps)) return;
     bitecs_SystemStepCtx ctx = {0};
-    if (!bitecs_mask_from_array(&ctx.query, components, ncomps)) {
+    ctx.queryContext.flags = flags;
+    if (!bitecs_mask_from_array(&ctx.queryContext.query, components, ncomps)) {
         return;
     }
-    bitecs_ranks_get(&ctx.ranks, ctx.query.dict);
+    bitecs_ranks_get(&ctx.queryContext.ranks, ctx.queryContext.query.dict);
     ctx.ptrStorage = alloca(sizeof(void*) * ncomps);
     ctx.system = system;
     ctx.udata = udata;
@@ -207,15 +214,16 @@ void bitecs_system_run(bitecs_registry *reg, const int *components, int ncomps, 
     }
 }
 
-static Entity* deref(Entity* entts, index_t count, bitecs_EntityPtr ptr)
+static Entity* deref(bitecs_registry* reg, bitecs_EntityPtr ptr)
 {
-    return ptr.index < count && entts[ptr.index].generation == ptr.generation
-        ? entts + ptr.index
+    return ptr.index < reg->entities_count && reg->entities[ptr.index].generation == ptr.generation
+        ? reg->entities + ptr.index
         : NULL;
 }
 
 static bool reserve_chunks(component_list* list, index_t index, index_t count)
 {
+    if (!list->meta.typesize) return true;
     index_t chunk = (index + count) >> components_shift(list);
     if (list->nchunks <= chunk) {
         index_t newSize = chunk + 1;
@@ -243,10 +251,14 @@ static bool reserve_chunks(component_list* list, index_t index, index_t count)
     return true;
 }
 
-
 static bool component_add_range(component_list* list, index_t index, index_t count, void** begin, index_t* added)
 {
-    if (!count) return false;
+    if (unlikely(!count)) return false;
+    if (!list->meta.typesize) {
+        *begin = NULL;
+        *added = count;
+        return true;
+    }
     index_t chunk = index >> components_shift(list);
     index_t i = index & fill_up_to(components_shift(list));
     index_t diff = components_in_chunk(list) - i;
@@ -269,7 +281,7 @@ void *bitecs_entt_add_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bite
 {
     component_list* list = reg->components[id];
     if (!list) return NULL;
-    Entity* e = deref(reg->entities, reg->entities_count, ptr);
+    Entity* e = deref(reg, ptr);
     if (!e) return NULL;
     mask_t wasDict = e->dict;
     mask_t wasComponents = e->components;
@@ -299,13 +311,13 @@ static void* deref_comp(component_list* list, index_t index)
 
 void *bitecs_entt_get_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
 {
-    Entity* e = deref(reg->entities, reg->entities_count, ptr);
+    Entity* e = deref(reg, ptr);
     return e && bitecs_mask_get((SparseMask*)e, id) ? deref_comp(reg->components[id], ptr.index) : NULL;
 }
 
 bool bitecs_entt_remove_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
 {
-    Entity* e = deref(reg->entities, reg->entities_count, ptr);
+    Entity* e = deref(reg, ptr);
     if (unlikely(!e)) return false;
     if (!bitecs_mask_get((SparseMask*)e, id)) return false;
     component_list* list = reg->components[id];
@@ -426,7 +438,7 @@ void bitecs_entt_destroy_batch(bitecs_registry *reg, const bitecs_EntityPtr *ptr
     bitecs_index_t count = 0;
     for (size_t i = 0; i < nptrs; ++i) {
         const bitecs_EntityPtr* ptr = ptrs + i;
-        Entity* e = deref(reg->entities, reg->entities_count, *ptr);
+        Entity* e = deref(reg, *ptr);
         if (e) {
             e->generation = reg->generation;
             if (!count) {
@@ -451,7 +463,7 @@ void bitecs_entt_destroy_batch(bitecs_registry *reg, const bitecs_EntityPtr *ptr
 
 void bitecs_entt_destroy(bitecs_registry *reg, bitecs_EntityPtr ptr)
 {
-    Entity* e = deref(reg->entities, reg->entities_count, ptr);
+    Entity* e = deref(reg, ptr);
     if (unlikely(!e)) return;
     reg->generation++;
     e->generation = reg->generation;
@@ -485,4 +497,9 @@ bool bitecs_check_components(bitecs_registry *reg, const int *components, int nc
         }
     }
     return true;
+}
+
+bitecs_EntityProxy* bitecs_entt_deref(bitecs_registry *reg, bitecs_EntityPtr ptr)
+{
+    return (bitecs_EntityProxy*)deref(reg, ptr);
 }

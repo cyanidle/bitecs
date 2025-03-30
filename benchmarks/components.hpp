@@ -1,4 +1,8 @@
-﻿#include <bitecs/bitecs.hpp>
+﻿#pragma once
+#include <fastPRNG.h>
+#include <utility>
+#include <vector>
+#include "gsl/gsl-lite.hpp"
 
 using TimeDelta = double;
 
@@ -10,25 +14,30 @@ struct DataComponent {
     bool mingy{false};
 
     uint32_t seed{DefaultSeed};
-    random_xoshiro128 rng;
+    fastPRNG::fastXS32 rng;
     uint32_t numgy;
 
-    DataComponent() : rng(seed), numgy(rng()) {}
+    DataComponent() : rng(seed), numgy(rng.xorShift()) {}
 };
 
-struct EmptyComponent{};
+struct EmptyComponent {};
 
-};
-
+inline constexpr char PlayerSprite = '@';
+inline constexpr char MonsterSprite = 'k';
+inline constexpr char NPCSprite = 'h';
+inline constexpr char GraveSprite = '|';
+inline constexpr char SpawnSprite = '_';
+inline constexpr char NoneSprite = ' ';
 
 enum class PlayerType { NPC, Monster, Hero };
 
 struct PlayerComponent {
-    ecs::benchmarks::base::random_xoshiro128 rng{};
+    fastPRNG::fastXS32 rng{};
     PlayerType type{PlayerType::NPC};
 };
 
 enum class StatusEffect { Spawn, Dead, Alive };
+
 struct HealthComponent {
     int32_t hp{0};
     int32_t maxhp{0};
@@ -70,7 +79,7 @@ static void updateData(DataComponent& data, TimeDelta dt) {
     data.thingy = (data.thingy + 1) % 1'000'000;
     data.dingy += 0.0001 * gsl::narrow_cast<double>(dt);
     data.mingy = !data.mingy;
-    data.numgy = data.rng();
+    data.numgy = data.rng.xorShift();
 }
 
 static void updateHealth(HealthComponent& health) {
@@ -88,14 +97,14 @@ static void updateHealth(HealthComponent& health) {
     }
 }
 
-static void updateComponents(const PositionComponent& position, DirectionComponent& direction, DataComponent& data) {
+static void updateGeneric(const PositionComponent& position, VelocityComponent& direction, DataComponent& data) {
     if ((data.thingy % 10) == 0) {
         if (position.x > position.y) {
-            direction.x = gsl::narrow_cast<float>(data.rng.range(3, 19)) - 10.0F;
-            direction.y = gsl::narrow_cast<float>(data.rng.range(0, 5));
+            direction.x = gsl::narrow_cast<float>(data.rng.xoroshiro64x_Range(3, 19)) - 10.0F;
+            direction.y = gsl::narrow_cast<float>(data.rng.xoroshiro64x_Range(0, 5));
         } else {
-            direction.x = gsl::narrow_cast<float>(data.rng.range(0, 5));
-            direction.y = gsl::narrow_cast<float>(data.rng.range(3, 19)) - 10.0F;
+            direction.x = gsl::narrow_cast<float>(data.rng.xoroshiro64x_Range(0, 5));
+            direction.y = gsl::narrow_cast<float>(data.rng.xoroshiro64x_Range(3, 19)) - 10.0F;
         }
     }
 }
@@ -115,8 +124,8 @@ public:
     [[nodiscard]] auto height() const noexcept { return m_height; }
 
     void draw(int x, int y, char c) {
-        if (y >= 0 && std::cmp_less(y, m_height)) {
-            if (x >= 0 && std::cmp_less(x, m_width)) {
+        if (y >= 0 && uint32_t(y) < m_height) {
+            if (x >= 0 && uint32_t(x) < m_width) {
                 m_buffer[gsl::narrow_cast<size_t>(x) + gsl::narrow_cast<size_t>(y) * m_width] = c;
             }
         }
@@ -128,29 +137,34 @@ private:
     std::vector<char> m_buffer;
 };
 
-void renderSprite(PositionComponent& position,
-                  SpriteComponent& spr) {
-    //todo
+void renderSprite(
+    FrameBuffer& out,
+    PositionComponent& position,
+    SpriteComponent& spr)
+{
+    out.draw(gsl::narrow_cast<int>(position.x), gsl::narrow_cast<int>(position.y), spr.character);
 }
 
-static void updateSprite(ecs::benchmarks::base::components::SpriteComponent& spr,
-                         const ecs::benchmarks::base::components::PlayerComponent& player,
-                         const ecs::benchmarks::base::components::HealthComponent& health) {
+static void updateSprite(
+    SpriteComponent& spr,
+    const PlayerComponent& player,
+    const HealthComponent& health)
+{
     spr.character = [&]() {
         switch (health.status) {
-        case components::StatusEffect::Alive:
+        case StatusEffect::Alive:
             switch (player.type) {
-            case components::PlayerType::Hero:
+            case PlayerType::Hero:
                 return PlayerSprite;
-            case components::PlayerType::Monster:
+            case PlayerType::Monster:
                 return MonsterSprite;
-            case components::PlayerType::NPC:
+            case PlayerType::NPC:
                 return NPCSprite;
             }
             break;
-        case components::StatusEffect::Dead:
+        case StatusEffect::Dead:
             return GraveSprite;
-        case components::StatusEffect::Spawn:
+        case StatusEffect::Spawn:
             return SpawnSprite;
         }
         return NoneSprite;
