@@ -195,20 +195,18 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
 
 void bitecs_system_run(
     bitecs_registry *reg, bitecs_flags_t flags,
-    const int *components, int ncomps, bitecs_Callback system, void *udata)
+    const bitecs_ComponentsList *comps, bitecs_Callback system, void *udata)
 {
-    if (unlikely(!ncomps)) return;
+    if (unlikely(!comps->ncomps)) return;
     bitecs_SystemStepCtx ctx = {0};
     ctx.queryContext.flags = flags;
-    if (!bitecs_mask_from_array(&ctx.queryContext.query, components, ncomps)) {
-        return;
-    }
+    ctx.queryContext.query = comps->mask;
     bitecs_ranks_get(&ctx.queryContext.ranks, ctx.queryContext.query.dict);
-    ctx.ptrStorage = alloca(sizeof(void*) * ncomps);
+    ctx.ptrStorage = alloca(sizeof(void*) * comps->ncomps);
     ctx.system = system;
     ctx.udata = udata;
-    ctx.components = components;
-    ctx.ncomps = ncomps;
+    ctx.components = comps->components;
+    ctx.ncomps = comps->ncomps;
     while (bitecs_system_step(reg, &ctx)) {
         // pass
     }
@@ -352,9 +350,10 @@ static bool reserve_entts(bitecs_registry *reg, index_t count)
 
 bool bitecs_entt_create(
     bitecs_registry *reg, index_t count,
-    const int* comps, int ncomps,
+    const bitecs_ComponentsList* components,
     bitecs_Callback creator, void* udata)
 {
+    if (unlikely(!count)) return true;
     index_t found;
     if (!take_free(&reg->freeList, count, &found)) {
         // prevent always allocating cases (high fragmentation of free spaces)
@@ -362,8 +361,8 @@ bool bitecs_entt_create(
         // wanted chunks by 2
         if (reg->total_free / count > 3) {
             index_t pivot = count / 2;
-            return bitecs_entt_create(reg, pivot, comps, ncomps, creator, udata)
-                   && bitecs_entt_create(reg, count - pivot, comps, ncomps, creator, udata);
+            return bitecs_entt_create(reg, pivot, components, creator, udata)
+                   && bitecs_entt_create(reg, count - pivot, components, creator, udata);
         }
         if (unlikely(!reserve_entts(reg, reg->entities_count + count))) {
             return false;
@@ -372,26 +371,24 @@ bool bitecs_entt_create(
     } else {
         reg->total_free -= count;
     }
-    for (int i = 0; i < ncomps; ++i) {
-        int comp = comps[i];
+    for (int i = 0; i < components->ncomps; ++i) {
+        int comp = components->components[i];
         component_list* list = reg->components[comp];
         if (unlikely(!list)) return false;
         if (unlikely(!reserve_chunks(list, found, count))) return false;
     }
-    SparseMask mask;
-    if (unlikely(!bitecs_mask_from_array(&mask, comps, ncomps))) return false;
     for (index_t i = found; i < found + count; ++i) {
-        reg->entities[i].components = mask.bits;
-        reg->entities[i].dict = mask.dict;
+        reg->entities[i].components = components->mask.bits;
+        reg->entities[i].dict = components->mask.dict;
         reg->entities[i].generation = reg->generation;
     }
     index_t cursor = found;
-    void** begins = alloca(sizeof(void*) * ncomps);
+    void** begins = alloca(sizeof(void*) * components->ncomps);
     bitecs_CallbackContext ctx;
     while (count) {
         index_t smallestRange = count;
-        for (int i = 0; i < ncomps; ++i) {
-            int comp = comps[i];
+        for (int i = 0; i < components->ncomps; ++i) {
+            int comp = components->components[i];
             component_list* list = reg->components[comp];
             index_t added;
             bool ok = component_add_range(list, cursor, count, begins + i, &added);
@@ -410,6 +407,8 @@ bool bitecs_entt_create(
 
 static void do_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t count)
 {
+    // todo: it may be better to expand the mask to get active components
+    // not sure. needs testing
     for (int i = 0; i < BITECS_MAX_COMPONENTS; ++i) {
         component_list* list = reg->components[i];
         if (!list) continue;
@@ -425,6 +424,7 @@ static void do_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t c
             cursor_count -= part;
         } while(cursor_count);
     }
+    // generation already bumped on this range of entts
     if (likely(add_free(&reg->freeList, ptr, count))) {
         reg->total_free += count;
     }
@@ -489,10 +489,10 @@ bool bitecs_registry_clone_settings(bitecs_registry *reg, bitecs_registry *out)
     return false;
 }
 
-bool bitecs_check_components(bitecs_registry *reg, const int *components, int ncomps)
+bool bitecs_check_components(bitecs_registry *reg, const bitecs_ComponentsList* components)
 {
-    for (int i = 0; i < ncomps; ++i) {
-        if (!reg->components[components[i]]) {
+    for (int i = 0; i < components->ncomps; ++i) {
+        if (!reg->components[components->components[i]]) {
             return false;
         }
     }

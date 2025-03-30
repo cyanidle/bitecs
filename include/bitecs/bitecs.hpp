@@ -32,12 +32,13 @@ class Components
     static_assert(impl::no_duplicates<Comps...>());
     static constexpr auto _data = impl::prepare_comps<Comps...>();
     static_assert(impl::count_groups(_data.data(), _data.size()) <= BITECS_GROUPS_COUNT);
+    static constexpr int _original[] = {component_id<Comps>...};
 public:
-    static constexpr const int* data() noexcept {
-        return _data.data();
-    }
-    static constexpr int size() noexcept {
-        return int(_data.size());
+    bitecs_ComponentsList list;
+    Components() {
+        list.mask = SparseMask(_data.data(), _data.size()).mask;
+        list.components = _original;
+        list.ncomps = _data.size();
     }
 };
 
@@ -51,22 +52,22 @@ struct SystemProxy
     {}
 
     template<typename Fn>
-    using if_compatible = std::enable_if_t<std::is_invocable_v<Fn, C&...> || std::is_invocable_v<Fn, EntityPtr, C&...>, int>;
+    using if_compatible = std::enable_if_t<std::is_invocable_v<Fn, C&...> || std::is_invocable_v<Fn, EntityPtr, C&...>>;
 
 
-    template<typename Fn, if_compatible<Fn> = 1>
+    template<typename Fn, typename = if_compatible<Fn>>
     void Run(bitecs_flags_t flags, Fn& f) {
-        constexpr Components<C...> comps;
+        static const Components<C...> comps;
         constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<C...>, C...>::call;
-        bitecs_system_run(reg, flags, comps.data(), comps.size(), system, (void*)&f);
+        bitecs_system_run(reg, flags, &comps.list, system, (void*)&f);
     }
 
-    template<typename Fn, if_compatible<Fn> = 1>
+    template<typename Fn, typename = if_compatible<Fn>>
     void Run(bitecs_flags_t flags, Fn&& f) {
         Run(flags, f);
     }
 
-    template<typename Fn, if_compatible<Fn> = 1>
+    template<typename Fn, typename = if_compatible<Fn>>
     void Run(Fn&& f) {
         Run(0, std::forward<Fn>(f));
     }
@@ -102,22 +103,22 @@ struct Registry
     }
     template<typename...Comps>
     EntityPtr Entt(Comps...comps) {
-        constexpr Components<Comps...> c;
+        static const Components<Comps...> c;
         EntityPtr res;
         void* temp[] = {&res, &comps...};
         using seq = std::index_sequence_for<Comps...>;
         using creator = impl::single_creator<seq, Comps...>;
-        if (!bitecs_entt_create(reg, 1, c.data(), c.size(), creator::call, &temp)) {
+        if (!bitecs_entt_create(reg, 1, &c.list, creator::call, &temp)) {
             throw std::runtime_error("Could not create entts");
         }
         return res;
     }
     template<typename FirstComp, typename...OtherComps, typename Fn>
     void Entts(index_t count, Fn& populate) {
-        constexpr Components<FirstComp, OtherComps...> c;
+        static const Components<FirstComp, OtherComps...> c;
         using seq = std::index_sequence_for<FirstComp, OtherComps...>;
         using creator = impl::multi_creator<Fn, seq, FirstComp, OtherComps...>;
-        if (!bitecs_entt_create(reg, count, c.data(), c.size(), creator::call, (void*)&populate)) {
+        if (!bitecs_entt_create(reg, count, &c.list, creator::call, (void*)&populate)) {
             throw std::runtime_error("Could not create entts");
         }
     }

@@ -1,10 +1,6 @@
 ﻿#include "components.hpp"
 #include <benchmark/benchmark.h>
 
-constexpr long MIN_ENTITIES_RANGE = 0L;
-constexpr long MAX_ENTITIES_RANGE = 2'097'152L;
-constexpr long SMALL_MAX_ENTITIES_RANGE = 32'768L;
-
 struct ECS_Interface
 {
     using Entity = int;
@@ -36,8 +32,10 @@ static typename ECS::Entity CreateEntities(benchmark::State& state, ECS& ecs)
     >();
 
     std::vector<DataComponent> datas(ndata);
-    ecs.CreateManyEntts(ndata, datas.data());
+    std::vector<EmptyComponent> empt(ndata);
+    ecs.CreateManyEntts(ndata, datas.data(), empt.data());
 
+    std::vector<DataComponent> alive_datas(nheroes + nmonsters);
     std::vector<HealthComponent> healths(nheroes + nmonsters);
     std::vector<VelocityComponent> vels(nheroes + nmonsters);
     std::vector<DamageComponent> dmgs(nheroes + nmonsters);
@@ -45,6 +43,7 @@ static typename ECS::Entity CreateEntities(benchmark::State& state, ECS& ecs)
     std::vector<PlayerComponent> players(nheroes + nmonsters);
 
     for (size_t i{0}; i < nheroes + nmonsters; ++i) {
+        alive_datas[i].rng.seed(i);
         healths[i].maxhp = i & 1 ? 100 : 200;
         healths[i].status = StatusEffect::Spawn;
         healths[i].hp = healths[i].maxhp;
@@ -58,7 +57,7 @@ static typename ECS::Entity CreateEntities(benchmark::State& state, ECS& ecs)
         }
     }
 
-    ecs.CreateManyEntts(nheroes + nmonsters, healths.data(), vels.data(), dmgs.data(), sprites.data(), players.data());
+    ecs.CreateManyEntts(nheroes + nmonsters, alive_datas.data(), healths.data(), vels.data(), dmgs.data(), sprites.data(), players.data());
 
     auto protagonist = ecs.CreateOneEntt(
         HealthComponent{1000, 1000, StatusEffect::Spawn},
@@ -78,7 +77,7 @@ static void RunSystems(ECS& ecs)
     });
     ecs.template RunSystem<HealthComponent>(updateHealth);
     ecs.template RunSystem<HealthComponent, DamageComponent>(updateDamage);
-    ecs.template RunSystem<PositionComponent, VelocityComponent, DataComponent>(updateGeneric);
+    ecs.template RunSystem<PositionComponent, VelocityComponent, DataComponent>(updateComplex);
     ecs.template RunSystem<PositionComponent, VelocityComponent>([&](auto& pos, auto& dir){
         updatePosition(pos, dir, 1.f/60.f);
     });
@@ -122,12 +121,11 @@ static void BM_ECS_Modify_One(benchmark::State& state)
 }
 
 static void Configurations(benchmark::internal::Benchmark* bench) {
-    const auto matrix = {10, 30, 2000, 12000, 200'000, 2'000'000};
+    bench->ArgNames({"datas", "heroes", "monsters"});
+    const auto matrix = {0, 10, 30, 2000, 30000, 1'000'000};
     for (long datas: matrix) {
-        for (long heroes: matrix) {
-            for (long monsters: matrix) {
-                bench->Args({datas, heroes, monsters});
-            }
+        for (long alive: matrix) {
+             bench->Args({datas, alive, alive});
         }
     }
 }
@@ -135,4 +133,4 @@ static void Configurations(benchmark::internal::Benchmark* bench) {
 #define ECS_BENCHMARKS(ECS) \
 BENCHMARK(BM_ECS<ECS>)->Apply(Configurations); \
 BENCHMARK(BM_ECS_Create_Destroy_Entities<ECS>)->Apply(Configurations); \
-BENCHMARK(BM_ECS_Modify_One<ECS>)->Apply(Configurations) \
+BENCHMARK(BM_ECS_Modify_One<ECS>) \

@@ -51,10 +51,14 @@ typedef struct
 
 typedef struct
 {
-    bitecs_mask_t components; // 4 groups of 16 bits
-    bitecs_dict_t dict; // which groups of 32 bits are active out of 64 total
+    // 4 groups of 32 bits. 4-128 active on single entt at the same time
+    bitecs_mask_t components;
+    // which groups of 32 bits are active out of 64 total (max components registered: 2048)
+    bitecs_dict_t dict;
+    // generation make all EntityPtr weak references (check if this actually is still alive entt)
     bitecs_generation_t generation;
-    bitecs_flags_t flags; // user-defined flags
+    // user-defined flags
+    bitecs_flags_t flags;
 } bitecs_Entity;
 
 typedef struct
@@ -116,10 +120,18 @@ typedef struct {
 
 typedef void (*bitecs_Callback)(void* udata, bitecs_CallbackContext* ctx, void** begins, bitecs_index_t count);
 
+
+typedef struct
+{
+    bitecs_SparseMask mask;
+    const int* components;
+    int ncomps;
+} bitecs_ComponentsList;
+
 _BITECS_NODISCARD
 bool bitecs_entt_create(
     bitecs_registry* reg, bitecs_index_t count,
-    const int* comps, int ncomps,
+    const bitecs_ComponentsList* components,
     bitecs_Callback creator, void* udata);
 
 void bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr);
@@ -133,16 +145,16 @@ bool bitecs_entt_remove_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bi
 _BITECS_NODISCARD
 void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id);
 
-// @warning: do not store this pointer. Mey be relocated at any time.
+// @warning: do not store this pointer. May be relocated at any time.
 _BITECS_NODISCARD bitecs_EntityProxy* bitecs_entt_deref(bitecs_registry* reg, bitecs_EntityPtr ptr);
 
 void bitecs_system_run(
     bitecs_registry* reg, bitecs_flags_t flags,
-    const int* components, int ncomps,
+    const bitecs_ComponentsList* comps,
     bitecs_Callback system, void* udata);
 
 _BITECS_NODISCARD
-bool bitecs_check_components(bitecs_registry* reg, const int* components, int ncomps);
+bool bitecs_check_components(bitecs_registry* reg, const bitecs_ComponentsList* components);
 
 typedef struct
 {

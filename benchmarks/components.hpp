@@ -97,7 +97,7 @@ static void updateHealth(HealthComponent& health) {
     }
 }
 
-static void updateGeneric(const PositionComponent& position, VelocityComponent& direction, DataComponent& data) {
+static void updateComplex(const PositionComponent& position, VelocityComponent& direction, DataComponent& data) {
     if ((data.thingy % 10) == 0) {
         if (position.x > position.y) {
             direction.x = gsl::narrow_cast<float>(data.rng.xoroshiro64x_Range(3, 19)) - 10.0F;

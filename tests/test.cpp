@@ -11,8 +11,8 @@ struct Component1 {
 
 struct Component2 {
     enum {bitecs_id = 303};
-    float a;
-    float b;
+    double a;
+    double b;
 };
 
 struct Component3 {
@@ -68,7 +68,7 @@ TEST(Entts, MultiCreate) {
     int prev_counts = 0;
     for (int count: counts) {
         int iter = 0;
-        reg.Entts<Component1, Component2>(count, [&](EntityPtr ptr, Component1& c1, Component2& c2){
+        reg.Entts<Component2, Component1>(count, [&](EntityPtr ptr, Component2& c2, Component1& c1){
             iter++;
             c1.a = iter;
             c1.b = iter * 2;
