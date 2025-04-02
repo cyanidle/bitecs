@@ -154,7 +154,7 @@ void bitecs_system_run(
     bitecs_Callback system, void* udata);
 
 _BITECS_NODISCARD
-bool bitecs_check_components(bitecs_registry* reg, const bitecs_ComponentsList* components);
+int bitecs_check_components(bitecs_registry* reg, const bitecs_ComponentsList* components);
 
 typedef struct
 {

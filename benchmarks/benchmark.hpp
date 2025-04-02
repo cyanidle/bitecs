@@ -20,7 +20,24 @@ struct ECS_Interface
 
 
 template<typename ECS>
-static typename ECS::Entity CreateEntities(benchmark::State& state, ECS& ecs)
+static typename ECS::Entity CreateProtag(ECS& ecs)
+{
+    ecs.template RegisterComponents<
+        HealthComponent, PlayerComponent, DataComponent, EmptyComponent,
+        DamageComponent, PositionComponent, SpriteComponent, VelocityComponent
+    >();
+    return ecs.CreateOneEntt(
+        HealthComponent{1000, 1000, StatusEffect::Spawn},
+        PositionComponent{10, 10},
+        VelocityComponent{0, 0},
+        DamageComponent{0, 5},
+        SpriteComponent{SpawnSprite},
+        PlayerComponent{{999}, PlayerType::Hero}
+    );
+}
+
+template<typename ECS>
+static void CreateEntities(benchmark::State& state, ECS& ecs)
 {
     size_t ndata = state.range(0);
     size_t nheroes = state.range(1);
@@ -37,6 +54,7 @@ static typename ECS::Entity CreateEntities(benchmark::State& state, ECS& ecs)
 
     std::vector<DataComponent> alive_datas(nheroes + nmonsters);
     std::vector<HealthComponent> healths(nheroes + nmonsters);
+    std::vector<PositionComponent> poses(nheroes + nmonsters);
     std::vector<VelocityComponent> vels(nheroes + nmonsters);
     std::vector<DamageComponent> dmgs(nheroes + nmonsters);
     std::vector<SpriteComponent> sprites(nheroes + nmonsters);
@@ -57,16 +75,9 @@ static typename ECS::Entity CreateEntities(benchmark::State& state, ECS& ecs)
         }
     }
 
-    ecs.CreateManyEntts(nheroes + nmonsters, alive_datas.data(), healths.data(), vels.data(), dmgs.data(), sprites.data(), players.data());
-
-    auto protagonist = ecs.CreateOneEntt(
-        HealthComponent{1000, 1000, StatusEffect::Spawn},
-        VelocityComponent{0, 0},
-        DamageComponent{0, 5},
-        SpriteComponent{SpawnSprite},
-        PlayerComponent{{999}, PlayerType::Hero}
-    );
-    return protagonist;
+    ecs.CreateManyEntts(nheroes + nmonsters,
+                        alive_datas.data(), healths.data(), poses.data(),
+                        vels.data(), dmgs.data(), sprites.data(), players.data());
 }
 
 template<typename ECS>
@@ -94,7 +105,8 @@ template<typename ECS>
 static void BM_ECS(benchmark::State& state)
 {
     ECS ecs;
-    auto protagonist = CreateEntities(state, ecs);
+    CreateEntities(state, ecs);
+    auto protagonist = CreateProtag(ecs);
     for ([[maybe_unused]] auto _: state) {
         RunSystems(ecs);
         PlotArmor(ecs, protagonist);
@@ -106,7 +118,7 @@ static void BM_ECS_Create_Destroy_Entities(benchmark::State& state)
 {
     for ([[maybe_unused]] auto _: state) {
         ECS ecs;
-        benchmark::DoNotOptimize(CreateEntities(state, ecs));
+        CreateEntities(state, ecs);
     }
 }
 
@@ -114,7 +126,7 @@ template<typename ECS>
 static void BM_ECS_Modify_One(benchmark::State& state)
 {
     ECS ecs;
-    auto protagonist = CreateEntities(state, ecs);
+    auto protagonist = CreateProtag(ecs);
     for ([[maybe_unused]] auto _: state) {
         PlotArmor(ecs, protagonist);
     }
@@ -122,7 +134,7 @@ static void BM_ECS_Modify_One(benchmark::State& state)
 
 static void Configurations(benchmark::internal::Benchmark* bench) {
     bench->ArgNames({"datas", "heroes", "monsters"});
-    const auto matrix = {0, 10, 30, 2000, 30000, 1'000'000};
+    const auto matrix = {0, 2000, 30000, 500'000};
     for (long datas: matrix) {
         for (long alive: matrix) {
              bench->Args({datas, alive, alive});

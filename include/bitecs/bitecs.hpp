@@ -88,14 +88,12 @@ struct Registry
     }
 
     template<typename T>
-    void DefineComponent(bitecs_Frequency freq = bitecs_Frequency::bitecs_freq5) {
+    bool DefineComponent(bitecs_Frequency freq = bitecs_Frequency::bitecs_freq5) {
         bitecs_ComponentMeta meta {impl::is_empty<T> ? 0 : sizeof(T), freq, nullptr};
         if (!std::is_trivially_destructible_v<T>) {
             meta.deleter = impl::deleter_for<T>;
         }
-        if (!bitecs_component_define(reg, component_id<T>, meta)) {
-            throw std::runtime_error("Could not define");
-        }
+        return bitecs_component_define(reg, component_id<T>, meta);
     }
     template<typename...Comps>
     SystemProxy<Comps...> System() {

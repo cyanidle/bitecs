@@ -489,14 +489,14 @@ bool bitecs_registry_clone_settings(bitecs_registry *reg, bitecs_registry *out)
     return false;
 }
 
-bool bitecs_check_components(bitecs_registry *reg, const bitecs_ComponentsList* components)
+int bitecs_check_components(bitecs_registry *reg, const bitecs_ComponentsList* components)
 {
     for (int i = 0; i < components->ncomps; ++i) {
         if (!reg->components[components->components[i]]) {
-            return false;
+            return i;
         }
     }
-    return true;
+    return -1;
 }
 
 bitecs_EntityProxy* bitecs_entt_deref(bitecs_registry *reg, bitecs_EntityPtr ptr)

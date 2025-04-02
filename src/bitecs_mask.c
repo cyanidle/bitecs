@@ -61,7 +61,8 @@ index_t bitecs_query_match(
         if (adjust) {
             mask = adjust_for(diff, query->bits, ranks->select_dict_masks);
         }
-        if ((entt->components & mask) == mask) {
+        mask_t ecomps = entt->components;
+        if ((ecomps & mask) == mask) {
             return cursor;
         }
     }
