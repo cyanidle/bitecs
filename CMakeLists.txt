@@ -49,7 +49,8 @@ if (BITECS_BENCH)
     find_package(fastprng REQUIRED)
     find_package(EnTT REQUIRED)
 
-    add_executable(bitecs_bench benchmarks/benchmark.cpp)
+    file(GLOB benches CONFIGURE_DEPENDS benchmarks/*.cpp)
+    add_executable(bitecs_bench ${benches})
     target_link_libraries(bitecs_bench PRIVATE
         bitecs
         benchmark::benchmark_main

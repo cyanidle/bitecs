@@ -93,6 +93,11 @@ static void RunSystems(ECS& ecs)
         updatePosition(pos, dir, 1.f/60.f);
     });
     ecs.template RunSystem<SpriteComponent, PlayerComponent, HealthComponent>(updateSprite);
+    FrameBuffer buffer(rand() % 100, rand() & 200);
+    ecs.template RunSystem<SpriteComponent, PositionComponent>([&](auto& sprite, auto& pos){
+        renderSprite(buffer, pos, sprite);
+    });
+    // todo: maybe use data in buffer to prevent it being removed? is it removed?
 }
 
 template<typename ECS>
@@ -134,7 +139,7 @@ static void BM_ECS_Modify_One(benchmark::State& state)
 
 static void Configurations(benchmark::internal::Benchmark* bench) {
     bench->ArgNames({"datas", "heroes", "monsters"});
-    const auto matrix = {0, 2000, 30000, 500'000};
+    const auto matrix = {10, 2000, 30000, 500'000};
     for (long datas: matrix) {
         for (long alive: matrix) {
              bench->Args({datas, alive, alive});

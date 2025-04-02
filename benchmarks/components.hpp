@@ -137,7 +137,7 @@ private:
     std::vector<char> m_buffer;
 };
 
-void renderSprite(
+static void renderSprite(
     FrameBuffer& out,
     PositionComponent& position,
     SpriteComponent& spr)
