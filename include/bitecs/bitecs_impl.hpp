@@ -8,6 +8,12 @@
 #include <exception>
 #include <utility>
 
+#ifdef __GNUC__
+#define _BITECS_FLATTEN __attribute((flatten))
+#else
+#define _BITECS_FLATTEN
+#endif
+
 namespace bitecs
 {
 
@@ -90,26 +96,27 @@ constexpr std::array<int, sizeof...(Comps)> prepare_comps()
 }
 
 template<typename T>
+_BITECS_FLATTEN
 void deleter_for(void* begin, index_t count) {
     for (index_t i = 0; i < count; ++i) {
         static_cast<T*>(begin)[i].~T();
     }
 }
 
-
 template<typename, typename, typename...>
 struct system_thunk;
 template<typename Fn, typename...Comps, size_t...Is>
 struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
 {
+    _BITECS_FLATTEN
     static void call(void* udata, CallbackContext* ctx, void** outs, index_t count)
     {
-        Fn& f = *(Fn*)udata;
-        EntityPtr ptr;
+        Fn& f = *reinterpret_cast<Fn*>(udata);
         for (size_t i = 0; i < count; ++i) {
-            ptr.generation = ctx->entts[i].generation;
-            ptr.index = ctx->beginIndex + i;
             if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
+                EntityPtr ptr;
+                ptr.generation = ctx->entts[i].generation;
+                ptr.index = ctx->beginIndex + i;
                 f(ptr, *(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
             } else {
                 f(*(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
@@ -122,6 +129,8 @@ template<typename, typename...>
 struct single_creator;
 template<typename...Comps, size_t...Is>
 struct single_creator<std::index_sequence<Is...>, Comps...> {
+
+    _BITECS_FLATTEN
     static void call(void* udata, CallbackContext* ctx, void** outs, index_t)
     {
         void** sources = static_cast<void**>(udata);
@@ -136,14 +145,16 @@ template<typename, typename, typename...>
 struct multi_creator;
 template<typename Fn, typename...Comps, size_t...Is>
 struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
+
+    _BITECS_FLATTEN
     static void call(void* udata, CallbackContext* ctx, void** outs, index_t count)
     {
-        Fn& f = *(Fn*)(udata);
-        EntityPtr ptr;
+        Fn& f = *reinterpret_cast<Fn*>(udata);
         for (index_t i = 0; i < count; ++i) {
-            ptr.generation = ctx->entts[i].generation;
-            ptr.index = ctx->beginIndex + i;
             if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
+                EntityPtr ptr;
+                ptr.generation = ctx->entts[i].generation;
+                ptr.index = ctx->beginIndex + i;
                 f(ptr, (*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);
             } else {
                 f((*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);

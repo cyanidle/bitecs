@@ -91,7 +91,7 @@ _BITECS_NODISCARD
 bool bitecs_registry_merge_other(bitecs_registry* reg, bitecs_registry* from);
 
 typedef enum {
-    bitecs_rare = 1,
+    bitecs_freq1 = 1,
     bitecs_freq2,
     bitecs_freq3,
     bitecs_freq4,
@@ -99,7 +99,7 @@ typedef enum {
     bitecs_freq6,
     bitecs_freq7,
     bitecs_freq8,
-    bitecs_frequent,
+    bitecs_freq9,
 } bitecs_Frequency;
 
 typedef struct {

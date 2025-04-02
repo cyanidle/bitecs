@@ -59,7 +59,7 @@ struct SystemProxy
     void Run(bitecs_flags_t flags, Fn& f) {
         static const Components<C...> comps;
         constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<C...>, C...>::call;
-        bitecs_system_run(reg, flags, &comps.list, system, (void*)&f);
+        bitecs_system_run(reg, flags, &comps.list, system, reinterpret_cast<void*>(&f));
     }
 
     template<typename Fn, typename = if_compatible<Fn>>
@@ -111,18 +111,18 @@ struct Registry
         }
         return res;
     }
-    template<typename FirstComp, typename...OtherComps, typename Fn>
+    template<typename...Comps, typename Fn>
     void Entts(index_t count, Fn& populate) {
-        static const Components<FirstComp, OtherComps...> c;
-        using seq = std::index_sequence_for<FirstComp, OtherComps...>;
-        using creator = impl::multi_creator<Fn, seq, FirstComp, OtherComps...>;
-        if (!bitecs_entt_create(reg, count, &c.list, creator::call, (void*)&populate)) {
+        static const Components<Comps...> c;
+        using seq = std::index_sequence_for<Comps...>;
+        using creator = impl::multi_creator<Fn, seq, Comps...>;
+        if (!bitecs_entt_create(reg, count, &c.list, creator::call, reinterpret_cast<void*>(&populate))) {
             throw std::runtime_error("Could not create entts");
         }
     }
-    template<typename FirstComp, typename...OtherComps, typename Fn>
+    template<typename...Comps, typename Fn>
     void Entts(index_t count, Fn&& populate) {
-        Entts<FirstComp, OtherComps...>(count, populate);
+        Entts<Comps...>(count, populate);
     }
     template<typename...Comps>
     void EnttsFromArrays(index_t count, Comps*...init) {
