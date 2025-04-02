@@ -107,7 +107,7 @@ static void PlotArmor(ECS& ecs, typename ECS::Entity protagonist) {
 }
 
 template<typename ECS>
-static void BM_ECS(benchmark::State& state)
+static void BM(benchmark::State& state)
 {
     ECS ecs;
     CreateEntities(state, ecs);
@@ -119,7 +119,7 @@ static void BM_ECS(benchmark::State& state)
 }
 
 template<typename ECS>
-static void BM_ECS_Create_Destroy_Entities(benchmark::State& state)
+static void BM_Create_Destroy_Entities(benchmark::State& state)
 {
     for ([[maybe_unused]] auto _: state) {
         ECS ecs;
@@ -128,7 +128,7 @@ static void BM_ECS_Create_Destroy_Entities(benchmark::State& state)
 }
 
 template<typename ECS>
-static void BM_ECS_Modify_One(benchmark::State& state)
+static void BM_Modify_One(benchmark::State& state)
 {
     ECS ecs;
     auto protagonist = CreateProtag(ecs);
@@ -148,6 +148,6 @@ static void Configurations(benchmark::internal::Benchmark* bench) {
 }
 
 #define ECS_BENCHMARKS(ECS) \
-BENCHMARK(BM_ECS<ECS>)->Apply(Configurations); \
-BENCHMARK(BM_ECS_Create_Destroy_Entities<ECS>)->Apply(Configurations); \
-BENCHMARK(BM_ECS_Modify_One<ECS>) \
+BENCHMARK(BM<ECS>)->Apply(Configurations); \
+BENCHMARK(BM_Create_Destroy_Entities<ECS>)->Apply(Configurations); \
+BENCHMARK(BM_Modify_One<ECS>) \
