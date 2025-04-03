@@ -179,16 +179,6 @@ bool bitecs_system_step(bitecs_registry* reg, bitecs_SystemStepCtx* ctx);
 
 void bitecs_ranks_get(bitecs_Ranks* out, bitecs_dict_t dict);
 
-_BITECS_NODISCARD
-bitecs_index_t bitecs_query_match(
-    bitecs_index_t cursor, const bitecs_QueryContext* ctx,
-    const bitecs_Entity* entts, bitecs_index_t count);
-
-_BITECS_NODISCARD
-bitecs_index_t bitecs_query_miss(
-    bitecs_index_t cursor, const bitecs_QueryContext* ctx,
-    const bitecs_Entity* entts, bitecs_index_t count);
-
 // idxs must be sorted!
 _BITECS_NODISCARD
 bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count);

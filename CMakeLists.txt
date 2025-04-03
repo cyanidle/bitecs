@@ -14,8 +14,8 @@ option(BITECS_BENCH "Build bench" OFF)
 
 add_library(bitecs-core
     src/bitecs_core.c
-    src/bitecs_mask.c
-    src/bitecs_private.h
+
+
 )
 target_compile_options(bitecs-core PRIVATE -fexceptions)
 target_include_directories(bitecs-core PUBLIC
