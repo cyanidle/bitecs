@@ -37,23 +37,23 @@ TEST(Systems, Basic)
         (void)reg.Entt(Component1{}, Component2{});
         (void)reg.Entt(Component2{});
         int iter = 0;
-        reg.System<Component1>().Run([&](EntityPtr ptr, Component1& c1){
+        reg.RunSystem<Component1>([&](EntityPtr ptr, Component1& c1){
            iter++;
         });
         CHECK(iter == 3 * prev_counts);
         iter = 0;
         // First two c2`s not selected???
-        reg.System<Component2>().Run([&](EntityPtr ptr, Component2& c2){
+        reg.RunSystem<Component2>([&](EntityPtr ptr, Component2& c2){
            iter++;
         });
         CHECK(iter == 3 * prev_counts);
         iter = 0;
-        reg.System<Component3>().Run([&](EntityPtr ptr, Component3& c3){
+        reg.RunSystem<Component3>([&](EntityPtr ptr, Component3& c3){
             iter++;
         });
         CHECK(iter == 2 * prev_counts);
         iter = 0;
-        reg.System<Component1, Component2>().Run([&](EntityPtr ptr, Component1& c1, Component2& c2){
+        reg.RunSystem<Component1, Component2>([&](EntityPtr ptr, Component1& c1, Component2& c2){
             iter++;
         });
         CHECK(iter == 2 * prev_counts);
@@ -77,17 +77,17 @@ TEST(Entts, MultiCreate) {
         });
         CHECK(iter == count);
         iter = 0;
-        reg.System<Component1, Component2>().Run([&](Component1& c1, Component2& c2){
+        reg.RunSystem<Component1, Component2>([&](Component1& c1, Component2& c2){
             iter++;
         });
         CHECK(iter == count + prev_counts);
         iter = 0;
-        reg.System<Component1>().Run([&](Component1& c1){
+        reg.RunSystem<Component1>([&](Component1& c1){
             iter++;
         });
         CHECK(iter == count + prev_counts);
         iter = 0;
-        reg.System<Component2>().Run([&](Component2& c1){
+        reg.RunSystem<Component2>([&](Component2& c1){
             iter++;
         });
         CHECK(iter == count + prev_counts);
@@ -111,7 +111,7 @@ TEST(Entts, FromArray) {
         }
         reg.EnttsFromArrays(count, c1.data(), c2.data());
         int iter = 0;
-        reg.System<Component1, Component2>().Run([&](Component1& c1, Component2& c2){
+        reg.RunSystem<Component1, Component2>([&](Component1& c1, Component2& c2){
             iter++;
         });
         CHECK(iter == count + prev_counts);

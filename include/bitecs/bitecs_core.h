@@ -63,9 +63,9 @@ typedef struct
 
 typedef struct
 {
-    const bitecs_mask_t r_components;
-    const bitecs_dict_t r_dict;
-    const bitecs_generation_t r_generation;
+    const bitecs_mask_t components;
+    const bitecs_dict_t dict;
+    const bitecs_generation_t generation;
     bitecs_flags_t flags;
 } bitecs_EntityProxy;
 
@@ -115,7 +115,7 @@ bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_C
 
 typedef struct {
     bitecs_index_t beginIndex;
-    const bitecs_Entity* entts;
+    bitecs_EntityProxy* entts;
 } bitecs_CallbackContext;
 
 typedef void (*bitecs_Callback)(void* udata, bitecs_CallbackContext* ctx, void** begins, bitecs_index_t count);

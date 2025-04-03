@@ -217,7 +217,7 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
             smallestRange = selected < smallestRange ? selected : smallestRange;
         }
         cb_ctx.beginIndex = begin;
-        cb_ctx.entts = reg->entities + begin;
+        cb_ctx.entts = (bitecs_EntityProxy*)reg->entities + begin;
         ctx->system(ctx->udata, &cb_ctx, ctx->ptrStorage, smallestRange);
         begin += smallestRange;
     }
@@ -413,6 +413,7 @@ bool bitecs_entt_create(
         reg->entities[i].components = components->mask.bits;
         reg->entities[i].dict = components->mask.dict;
         reg->entities[i].generation = reg->generation;
+        reg->entities[i].flags = 0;
     }
     index_t cursor = found;
     void** begins = alloca(sizeof(void*) * components->ncomps);
@@ -427,7 +428,7 @@ bool bitecs_entt_create(
             if (unlikely(!ok)) return false; // already created leak here?
             smallestRange = added < smallestRange ? added : smallestRange;
         }
-        ctx.entts = reg->entities + cursor;
+        ctx.entts = (bitecs_EntityProxy*)reg->entities + cursor;
         ctx.beginIndex = cursor;
         creator(udata, &ctx, begins, smallestRange);
         count -= smallestRange;

@@ -42,36 +42,12 @@ public:
     }
 };
 
-template<typename...C>
-struct SystemProxy
-{
-    bitecs_registry* reg;
-
-    SystemProxy(bitecs_registry* reg) :
-        reg(reg)
-    {}
-
-    template<typename Fn>
-    using if_compatible = std::enable_if_t<std::is_invocable_v<Fn, C&...> || std::is_invocable_v<Fn, EntityPtr, C&...>>;
-
-
-    template<typename Fn, typename = if_compatible<Fn>>
-    void Run(bitecs_flags_t flags, Fn& f) {
-        static const Components<C...> comps;
-        constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<C...>, C...>::call;
-        bitecs_system_run(reg, flags, &comps.list, system, reinterpret_cast<void*>(&f));
-    }
-
-    template<typename Fn, typename = if_compatible<Fn>>
-    void Run(bitecs_flags_t flags, Fn&& f) {
-        Run(flags, f);
-    }
-
-    template<typename Fn, typename = if_compatible<Fn>>
-    void Run(Fn&& f) {
-        Run(0, std::forward<Fn>(f));
-    }
-};
+template<typename Fn, typename...Comps>
+using if_compatible_callback = std::enable_if_t<
+    std::is_invocable_v<Fn, Comps&...>
+    || std::is_invocable_v<Fn, EntityPtr, Comps&...>
+    || std::is_invocable_v<Fn, EntityProxy*, Comps&...>
+    >;
 
 struct Registry
 {
@@ -95,9 +71,21 @@ struct Registry
         }
         return bitecs_component_define(reg, component_id<T>, meta);
     }
-    template<typename...Comps>
-    SystemProxy<Comps...> System() {
-        return SystemProxy<Comps...>{reg};
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    void RunSystem(bitecs_flags_t flags, Fn& f) {
+        static const Components<Comps...> comps;
+        constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<Comps...>, Comps...>::call;
+        bitecs_system_run(reg, flags, &comps.list, system, reinterpret_cast<void*>(&f));
+    }
+
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    void RunSystem(bitecs_flags_t flags, Fn&& f) {
+        RunSystem<Comps...>(flags, f);
+    }
+
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    void RunSystem(Fn&& f) {
+        RunSystem<Comps...>(0, std::forward<Fn>(f));
     }
     template<typename...Comps>
     EntityPtr Entt(Comps...comps) {
@@ -111,7 +99,7 @@ struct Registry
         }
         return res;
     }
-    template<typename...Comps, typename Fn>
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
     void Entts(index_t count, Fn& populate) {
         static const Components<Comps...> c;
         using seq = std::index_sequence_for<Comps...>;
@@ -120,7 +108,7 @@ struct Registry
             throw std::runtime_error("Could not create entts");
         }
     }
-    template<typename...Comps, typename Fn>
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
     void Entts(index_t count, Fn&& populate) {
         Entts<Comps...>(count, populate);
     }
