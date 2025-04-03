@@ -80,7 +80,7 @@ struct Registry
     void DoRunSystem(std::index_sequence<Is...>, bitecs_flags_t flags, Fn& f) {
         bitecs_QueryCtx query = QueryFor<Comps...>::value;
         query.flags = flags;
-        void* ptrs[sizeof...(Comps)];
+        void* __restrict__ ptrs[sizeof...(Comps)];
         size_t selected;
         while (bitecs_system_step(reg, &query, ptrs, &selected)) {
             for (size_t i = 0; i < selected; ++i) {
@@ -119,7 +119,7 @@ struct Registry
         ctx.query = QueryFor<Comps...>::value;
         ctx.query.flags = flags;
         ctx.count = 1;
-        void* storage[sizeof...(Comps)];
+        void* __restrict__ storage[sizeof...(Comps)];
         size_t created;
         if (bitecs_entt_create(reg, &ctx, storage, &created)) {
             ((new (storage[Is]) Comps(std::move(comps))), ...);
@@ -142,7 +142,7 @@ struct Registry
         ctx.query = QueryFor<Comps...>::value;
         ctx.query.flags = flags;
         ctx.count = count;
-        void* ptrs[sizeof...(Comps)];
+        void* __restrict__ ptrs[sizeof...(Comps)];
         size_t created;
         while(bitecs_entt_create(reg, &ctx, ptrs, &created)) {
             for (index_t i = 0; i < created; ++i) {
