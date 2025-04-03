@@ -59,15 +59,15 @@ typedef struct
     bitecs_dict_t dict;
     // generation make all EntityPtr weak references (check if this actually is still alive entt)
     bitecs_generation_t generation;
-    // user-defined flags
+    // user-defined flags (for dirty marking, some action pending marking)
     bitecs_flags_t flags;
 } bitecs_Entity;
 
 typedef struct
 {
-    const bitecs_mask_t r_components;
-    const bitecs_dict_t r_dict;
-    const bitecs_generation_t r_generation;
+    const bitecs_mask_t components;
+    const bitecs_dict_t dict;
+    const bitecs_generation_t generation;
     bitecs_flags_t flags;
 } bitecs_EntityProxy;
 
@@ -123,7 +123,7 @@ typedef struct
     bitecs_flags_t flags;
     bitecs_SparseMask mask;
     bitecs_Ranks ranks;
-    const bitecs_Entity* outEntts;
+    const bitecs_EntityProxy* outEntts;
     bitecs_index_t outIndex;
     bitecs_index_t _cursor;
 } bitecs_QueryCtx;

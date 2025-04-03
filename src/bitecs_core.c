@@ -72,6 +72,17 @@ static void components_destroy(component_list* list)
     free(list);
 }
 
+struct bitecs_registry
+{
+    index_t entities_count;
+    index_t entities_cap;
+    Entity* entities;
+    struct FreeList* freeList;
+    index_t total_free;
+    bitecs_generation_t generation;
+    component_list* components[BITECS_MAX_COMPONENTS];
+};
+
 typedef struct FreeList
 {
     index_t index;
@@ -82,7 +93,8 @@ typedef struct FreeList
 
 
 _BITECS_NODISCARD
-static bool take_free(FreeList** _list, index_t count, index_t* outIndex) {
+static bool take_free(bitecs_registry* reg, index_t count, index_t* outIndex) {
+    FreeList** _list = &reg->freeList;
     FreeList* list = *_list;
     if (!list) return false;
     while(list) {
@@ -90,6 +102,7 @@ static bool take_free(FreeList** _list, index_t count, index_t* outIndex) {
             *outIndex = list->index;
             list->count -= count;
             list->index += count;
+            reg->total_free -= count;
             return true;
         } else if (list->count == count) {
             *outIndex = list->index;
@@ -97,6 +110,7 @@ static bool take_free(FreeList** _list, index_t count, index_t* outIndex) {
             if (list->next) list->next->prev = list->prev;
             *_list = list->next;
             free(list);
+            reg->total_free -= count;
             return true;
         } else {
             list = list->next;
@@ -105,23 +119,25 @@ static bool take_free(FreeList** _list, index_t count, index_t* outIndex) {
     return false;
 }
 
-_BITECS_NODISCARD
-static bool add_free(FreeList** _list, index_t index, index_t count) {
+static void add_free(bitecs_registry* reg, index_t index, index_t count) {
+    FreeList** _list = &reg->freeList;
     FreeList* old = *_list;
     while(old) {
         if (old->index + old->count == index) {
             old->count += count;
-            return true;
+            reg->total_free += count;
+            return;
         } else if (index + count == old->index) {
             old->index -= count;
             old->count += count;
-            return true;
+            reg->total_free += count;
+            return;
         }
         old = old->next;
     }
     old = *_list;
     FreeList* New = *_list = malloc(sizeof(FreeList));
-    if (!New) return false;
+    if (!New) return;
     New->count = count;
     New->prev = 0;
     New->next = old;
@@ -129,19 +145,8 @@ static bool add_free(FreeList** _list, index_t index, index_t count) {
     if (old) {
         old->prev = New;
     }
-    return true;
+    reg->total_free += count;
 }
-
-struct bitecs_registry
-{
-    Entity* entities;
-    FreeList* freeList;
-    index_t entities_count;
-    index_t entities_cap;
-    index_t total_free;
-    bitecs_generation_t generation;
-    component_list* components[BITECS_MAX_COMPONENTS];
-};
 
 bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta)
 {
@@ -198,7 +203,6 @@ static index_t select_up_to_chunk(component_list* list, index_t begin, index_t c
 static index_t query_match(index_t cursor, flags_t flags, const SparseMask* mask, const Ranks* ranks, const Entity* entts, index_t count);
 static index_t query_miss(index_t cursor, flags_t flags, const SparseMask* mask, const Ranks* ranks, const Entity* entts, index_t count);
 
-_BITECS_FLATTEN
 bool bitecs_system_step(bitecs_registry *reg, bitecs_QueryCtx* ctx, void** ptrs, size_t* outCount)
 {
     index_t begin = query_match(ctx->_cursor, ctx->flags, &ctx->mask, &ctx->ranks, reg->entities, reg->entities_count);
@@ -212,9 +216,9 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_QueryCtx* ctx, void** ptrs,
         index_t selected = select_up_to_chunk(reg->components[comp], begin, count, ptrs++);
         smallestRange = selected < smallestRange ? selected : smallestRange;
     }
-    ctx->outEntts = reg->entities + begin;
+    ctx->outEntts = (bitecs_EntityProxy*)reg->entities + begin;
     ctx->outIndex = begin;
-    ctx->_cursor = end;
+    ctx->_cursor = begin + smallestRange;
     *outCount = smallestRange;
     return true;
 }
@@ -355,20 +359,17 @@ static bool reserve_entts(bitecs_registry *reg, index_t count)
     return true;
 }
 
-_BITECS_FLATTEN
 bool bitecs_entt_create(bitecs_registry* reg, bitecs_CreateCtx* cctx, void** ptrs, size_t* batchSize)
 {
     bitecs_QueryCtx* ctx = &cctx->query;
     if (unlikely(!cctx->count)) return false;
     if (!ctx->_cursor) {
-        if (!take_free(&reg->freeList, cctx->count, &ctx->_cursor)) {
+        if (!take_free(reg, cctx->count, &ctx->_cursor)) {
             // todo: check if total free is too high: make query with part of wanted count
             if (unlikely(!reserve_entts(reg, reg->entities_count + cctx->count))) {
                 return false;
             }
             ctx->_cursor = reg->entities_count;
-        } else {
-            reg->total_free -= cctx->count;
         }
     }
     for (int i = 0; i < ctx->ncomps; ++i) {
@@ -392,7 +393,7 @@ bool bitecs_entt_create(bitecs_registry* reg, bitecs_CreateCtx* cctx, void** ptr
         if (unlikely(!ok)) return false; // already created leak here?
         smallestRange = added < smallestRange ? added : smallestRange;
     }
-    ctx->outEntts = reg->entities + ctx->_cursor;
+    ctx->outEntts = (bitecs_EntityProxy*)reg->entities + ctx->_cursor;
     ctx->outIndex = ctx->_cursor;
     *batchSize = smallestRange;
     cctx->count -= smallestRange;
@@ -403,7 +404,7 @@ bool bitecs_entt_create(bitecs_registry* reg, bitecs_CreateCtx* cctx, void** ptr
 
 static void do_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t count)
 {
-    // todo: it may be better to expand the mask to get active components
+    // todo: it may be better to expand the mask (instead of dumb iteration) to get active components
     // not sure. needs testing
     for (int i = 0; i < BITECS_MAX_COMPONENTS; ++i) {
         component_list* list = reg->components[i];
@@ -420,10 +421,7 @@ static void do_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t c
             cursor_count -= part;
         } while(cursor_count);
     }
-    // generation already bumped on this range of entts
-    if (likely(add_free(&reg->freeList, ptr, count))) {
-        reg->total_free += count;
-    }
+    add_free(reg, ptr, count);
 }
 
 void bitecs_entt_destroy_batch(bitecs_registry *reg, const bitecs_EntityPtr *ptrs, size_t nptrs)
@@ -530,6 +528,7 @@ static bool needs_adjust(dict_t diff, const bitecs_Ranks *ranks)
     // if any relocations (at least on biggest mask) -> dicts are incompatible
 }
 
+__attribute((noinline))
 static index_t query_match(
     bitecs_index_t cursor, flags_t flags, const SparseMask* query,
     const Ranks* ranks, const bitecs_Entity* entts, index_t count)
@@ -554,32 +553,19 @@ static index_t query_match(
     return cursor;
 }
 
+__attribute((noinline))
 static index_t query_miss(
     bitecs_index_t cursor, flags_t flags, const SparseMask* query,
     const Ranks* ranks, const bitecs_Entity* entts, index_t count)
 {
-    SparseMask adjusted;
-    const SparseMask* current = query;
     for (;cursor < count; ++cursor) {
         const Entity* entt = entts + cursor;
-    again:
         if ((entt->flags & flags) != flags) return cursor;
-        if ((entt->dict & current->dict) != current->dict) {
-            // missmatch on adjusted query is not definitive!
-            if (current != query) {
-                current = query;
-                goto again;
-            }
-            return cursor;
-        }
-        dict_t diff = entt->dict ^ current->dict;
+        dict_t diff = entt->dict ^ query->dict;
         bool adjust = needs_adjust(diff, ranks);
-        mask_t mask = current->bits;
+        mask_t mask = query->bits;
         if (unlikely(adjust)) {
-            mask = adjust_for(diff, current->bits, ranks->select_dict_masks);
-            adjusted.bits = mask;
-            adjusted.dict = entt->dict;
-            current = &adjusted;
+            mask = adjust_for(diff, query->bits, ranks->select_dict_masks);
         }
         if ((entt->components & mask) != mask) {
             return cursor;
@@ -587,6 +573,40 @@ static index_t query_miss(
     }
     return cursor;
 }
+
+// static index_t query_miss(
+//     bitecs_index_t cursor, flags_t flags, const SparseMask* query,
+//     const Ranks* ranks, const bitecs_Entity* entts, index_t count)
+// {
+//     SparseMask adjusted;
+//     const SparseMask* current = query;
+//     for (;cursor < count; ++cursor) {
+//         const Entity* entt = entts + cursor;
+//     again:
+//         if ((entt->flags & flags) != flags) return cursor;
+//         if ((entt->dict & current->dict) != current->dict) {
+//             // missmatch on adjusted query is not definitive!
+//             if (current != query) {
+//                 current = query;
+//                 goto again;
+//             }
+//             return cursor;
+//         }
+//         dict_t diff = entt->dict ^ current->dict;
+//         bool adjust = needs_adjust(diff, ranks);
+//         mask_t mask = current->bits;
+//         if (unlikely(adjust)) {
+//             mask = adjust_for(diff, current->bits, ranks->select_dict_masks);
+//             adjusted.bits = mask;
+//             adjusted.dict = entt->dict;
+//             current = &adjusted;
+//         }
+//         if ((entt->components & mask) != mask) {
+//             return cursor;
+//         }
+//     }
+//     return cursor;
+// }
 
 bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state)
 {

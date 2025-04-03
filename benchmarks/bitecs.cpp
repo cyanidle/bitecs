@@ -36,7 +36,7 @@ struct Bitecs
     }
     template<typename...Components, typename System>
     void RunSystem(System&& system) {
-        reg.System<Components...>().Run(system);
+        reg.RunSystem<Components...>(system);
     }
     template<typename Component>
     void AddComponentTo(Entity entt, Component c) {

@@ -50,53 +50,9 @@ struct QueryFor {
 template<typename Fn, typename...Comps>
 using if_compatible_callback = std::enable_if_t<
     std::is_invocable_v<Fn, Comps&...>
-    || std::is_invocable_v<Fn, EntityPtr, Comps&...>>;
-
-template<typename...Comps>
-struct SystemProxy
-{
-    bitecs_registry* reg;
-
-    SystemProxy(bitecs_registry* reg) :
-        reg(reg)
-    {}
-
-
-    template<typename Fn, size_t...Is>
-    void DoRun(std::index_sequence<Is...>, bitecs_flags_t flags, Fn& f) {
-        bitecs_QueryCtx query = QueryFor<Comps...>::value;
-        query.flags = flags;
-        void* ptrs[sizeof...(Comps)];
-        size_t selected;
-        while (bitecs_system_step(reg, &query, ptrs, &selected)) {
-            for (size_t i = 0; i < selected; ++i) {
-                if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
-                    EntityPtr ptr;
-                    ptr.generation = query.outEntts[i].generation;
-                    ptr.index = query.outIndex + i;
-                    f(ptr, *(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
-                } else {
-                    f(*(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
-                }
-            }
-        }
-    }
-
-    template<typename Fn, typename = if_compatible_callback<Fn, Comps...>>
-    void Run(bitecs_flags_t flags, Fn& f) {
-        DoRun(std::index_sequence_for<Comps...>{}, flags, f);
-    }
-
-    template<typename Fn, typename = if_compatible_callback<Fn, Comps...>>
-    void Run(bitecs_flags_t flags, Fn&& f) {
-        DoRun(std::index_sequence_for<Comps...>{}, flags, f);
-    }
-
-    template<typename Fn, typename = if_compatible_callback<Fn, Comps...>>
-    void Run(Fn&& f) {
-        DoRun(std::index_sequence_for<Comps...>{}, 0, f);
-    }
-};
+    || std::is_invocable_v<Fn, EntityPtr, Comps&...>
+    || std::is_invocable_v<Fn, EntityProxy*, Comps&...>
+    >;
 
 struct Registry
 {
@@ -120,10 +76,43 @@ struct Registry
         }
         return bitecs_component_define(reg, component_id<T>, meta);
     }
-    template<typename...Comps>
-    SystemProxy<Comps...> System() {
-        return SystemProxy<Comps...>{reg};
+    template<typename...Comps, typename Fn, size_t...Is>
+    void DoRunSystem(std::index_sequence<Is...>, bitecs_flags_t flags, Fn& f) {
+        bitecs_QueryCtx query = QueryFor<Comps...>::value;
+        query.flags = flags;
+        void* ptrs[sizeof...(Comps)];
+        size_t selected;
+        while (bitecs_system_step(reg, &query, ptrs, &selected)) {
+            for (size_t i = 0; i < selected; ++i) {
+                if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
+                    EntityPtr ptr;
+                    ptr.generation = query.outEntts[i].generation;
+                    ptr.index = query.outIndex + i;
+                    f(ptr, *(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
+                } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
+                    f(query.outEntts + i, *(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
+                } else {
+                    f(*(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
+                }
+            }
+        }
     }
+
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    void RunSystem(bitecs_flags_t flags, Fn& f) {
+        DoRunSystem<Comps...>(std::index_sequence_for<Comps...>{}, flags, f);
+    }
+
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    void RunSystem(bitecs_flags_t flags, Fn&& f) {
+        DoRunSystem<Comps...>(std::index_sequence_for<Comps...>{}, flags, f);
+    }
+
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    void RunSystem(Fn&& f) {
+        DoRunSystem<Comps...>(std::index_sequence_for<Comps...>{}, 0, f);
+    }
+
     template<typename...Comps, size_t...Is>
     EntityPtr DoEntt(std::index_sequence<Is...>, flags_t flags, Comps&...comps) {
         bitecs_CreateCtx ctx;
@@ -162,6 +151,8 @@ struct Registry
                     ptr.generation = ctx.query.outEntts[i].generation;
                     ptr.index = ctx.query.outIndex + i;
                     populate(ptr, (*new(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i)) Comps{})...);
+                } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
+                    f(ctx.query.outEntts + i, (*new(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i)) Comps{})...);
                 } else {
                     populate((*new(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i)) Comps{})...);
                 }
