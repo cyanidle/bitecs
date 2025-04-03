@@ -8,8 +8,10 @@
 #include <stdbool.h>
 
 #ifdef __GNUC__
+#define _BITECS_FLATTEN __attribute((flatten))
 #define _BITECS_NODISCARD __attribute__ ((__warn_unused_result__))
 #else
+#define _BITECS_FLATTEN
 #define _BITECS_NODISCARD
 #endif
 
@@ -113,27 +115,26 @@ typedef struct {
 _BITECS_NODISCARD
 bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta);
 
-typedef struct {
-    bitecs_index_t beginIndex;
-    const bitecs_Entity* entts;
-} bitecs_CallbackContext;
-
-typedef void (*bitecs_Callback)(void* udata, bitecs_CallbackContext* ctx, void** begins, bitecs_index_t count);
-
 
 typedef struct
 {
-    bitecs_SparseMask mask;
     const int* components;
     int ncomps;
-} bitecs_ComponentsList;
+    bitecs_flags_t flags;
+    bitecs_SparseMask mask;
+    bitecs_Ranks ranks;
+    const bitecs_Entity* outEntts;
+    bitecs_index_t outIndex;
+    bitecs_index_t _cursor;
+} bitecs_QueryCtx;
+
+typedef struct {
+    bitecs_QueryCtx query;
+    bitecs_index_t count;
+} bitecs_CreateCtx;
 
 _BITECS_NODISCARD
-bool bitecs_entt_create(
-    bitecs_registry* reg, bitecs_index_t count,
-    const bitecs_ComponentsList* components,
-    bitecs_Callback creator, void* udata);
-
+bool bitecs_entt_create(bitecs_registry* reg, bitecs_CreateCtx* ctx, void** ptrs, size_t* batchSize);
 void bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr);
 void bitecs_entt_destroy_batch(bitecs_registry* reg, const bitecs_EntityPtr* ptrs, size_t nptrs);
 
@@ -148,46 +149,10 @@ void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bite
 // @warning: do not store this pointer. May be relocated at any time.
 _BITECS_NODISCARD bitecs_EntityProxy* bitecs_entt_deref(bitecs_registry* reg, bitecs_EntityPtr ptr);
 
-void bitecs_system_run(
-    bitecs_registry* reg, bitecs_flags_t flags,
-    const bitecs_ComponentsList* comps,
-    bitecs_Callback system, void* udata);
-
 _BITECS_NODISCARD
-int bitecs_check_components(bitecs_registry* reg, const bitecs_ComponentsList* components);
-
-typedef struct
-{
-    bitecs_SparseMask query;
-    bitecs_Ranks ranks;
-    bitecs_flags_t flags;
-} bitecs_QueryContext;
-
-typedef struct
-{
-    void** ptrStorage; //should have space for void*[ncomps]
-    const int* components;
-    int ncomps;
-    bitecs_Callback system;
-    void* udata;
-    bitecs_QueryContext queryContext;
-    bitecs_index_t cursor;
-} bitecs_SystemStepCtx;
-
-_BITECS_NODISCARD
-bool bitecs_system_step(bitecs_registry* reg, bitecs_SystemStepCtx* ctx);
+bool bitecs_system_step(bitecs_registry* reg, bitecs_QueryCtx* ctx, void** ptrs, size_t* count);
 
 void bitecs_ranks_get(bitecs_Ranks* out, bitecs_dict_t dict);
-
-_BITECS_NODISCARD
-bitecs_index_t bitecs_query_match(
-    bitecs_index_t cursor, const bitecs_QueryContext* ctx,
-    const bitecs_Entity* entts, bitecs_index_t count);
-
-_BITECS_NODISCARD
-bitecs_index_t bitecs_query_miss(
-    bitecs_index_t cursor, const bitecs_QueryContext* ctx,
-    const bitecs_Entity* entts, bitecs_index_t count);
 
 // idxs must be sorted!
 _BITECS_NODISCARD
@@ -200,8 +165,7 @@ bool bitecs_mask_get(const bitecs_SparseMask* mask, int index);
 typedef int bitecs_BitsStorage[128];
 // returns N bits, that got written to storage*
 _BITECS_NODISCARD
-int bitecs_mask_into_array(
-    const bitecs_SparseMask* mask, const bitecs_Ranks* ranks, bitecs_BitsStorage* storage);
+int bitecs_mask_into_array(const bitecs_SparseMask* mask, const bitecs_Ranks* ranks, bitecs_BitsStorage* storage);
 
 void _bitecs_sanity_test(bitecs_SparseMask* out);
 

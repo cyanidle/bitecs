@@ -27,22 +27,32 @@ struct SparseMask
 };
 
 template<typename...Comps>
-class Components
-{
+constexpr int ComponentIdsFor[sizeof...(Comps)] = {component_id<Comps>...};
+
+template<typename...Comps>
+bitecs_QueryCtx MakeQueryFor() {
     static_assert(impl::no_duplicates<Comps...>());
     static constexpr auto _data = impl::prepare_comps<Comps...>();
     static_assert(impl::count_groups(_data.data(), _data.size()) <= BITECS_GROUPS_COUNT);
-    static constexpr int _original[] = {component_id<Comps>...};
-public:
-    bitecs_ComponentsList list;
-    Components() {
-        list.mask = SparseMask(_data.data(), _data.size()).mask;
-        list.components = _original;
-        list.ncomps = _data.size();
-    }
+    bitecs_QueryCtx query{};
+    query.mask = SparseMask(_data.data(), _data.size()).mask;
+    query.components = ComponentIdsFor<Comps...>;
+    query.ncomps = _data.size();
+    (void)bitecs_ranks_get(&query.ranks, query.mask.dict);
+    return query;
+}
+
+template<typename...Comps>
+struct QueryFor {
+    static inline const bitecs_QueryCtx value = MakeQueryFor<Comps...>();
 };
 
-template<typename...C>
+template<typename Fn, typename...Comps>
+using if_compatible_callback = std::enable_if_t<
+    std::is_invocable_v<Fn, Comps&...>
+    || std::is_invocable_v<Fn, EntityPtr, Comps&...>>;
+
+template<typename...Comps>
 struct SystemProxy
 {
     bitecs_registry* reg;
@@ -51,25 +61,40 @@ struct SystemProxy
         reg(reg)
     {}
 
-    template<typename Fn>
-    using if_compatible = std::enable_if_t<std::is_invocable_v<Fn, C&...> || std::is_invocable_v<Fn, EntityPtr, C&...>>;
 
+    template<typename Fn, size_t...Is>
+    void DoRun(std::index_sequence<Is...>, bitecs_flags_t flags, Fn& f) {
+        bitecs_QueryCtx query = QueryFor<Comps...>::value;
+        query.flags = flags;
+        void* ptrs[sizeof...(Comps)];
+        size_t selected;
+        while (bitecs_system_step(reg, &query, ptrs, &selected)) {
+            for (size_t i = 0; i < selected; ++i) {
+                if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
+                    EntityPtr ptr;
+                    ptr.generation = query.outEntts[i].generation;
+                    ptr.index = query.outIndex + i;
+                    f(ptr, *(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
+                } else {
+                    f(*(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
+                }
+            }
+        }
+    }
 
-    template<typename Fn, typename = if_compatible<Fn>>
+    template<typename Fn, typename = if_compatible_callback<Fn, Comps...>>
     void Run(bitecs_flags_t flags, Fn& f) {
-        static const Components<C...> comps;
-        constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<C...>, C...>::call;
-        bitecs_system_run(reg, flags, &comps.list, system, reinterpret_cast<void*>(&f));
+        DoRun(std::index_sequence_for<Comps...>{}, flags, f);
     }
 
-    template<typename Fn, typename = if_compatible<Fn>>
+    template<typename Fn, typename = if_compatible_callback<Fn, Comps...>>
     void Run(bitecs_flags_t flags, Fn&& f) {
-        Run(flags, f);
+        DoRun(std::index_sequence_for<Comps...>{}, flags, f);
     }
 
-    template<typename Fn, typename = if_compatible<Fn>>
+    template<typename Fn, typename = if_compatible_callback<Fn, Comps...>>
     void Run(Fn&& f) {
-        Run(0, std::forward<Fn>(f));
+        DoRun(std::index_sequence_for<Comps...>{}, 0, f);
     }
 };
 
@@ -99,36 +124,72 @@ struct Registry
     SystemProxy<Comps...> System() {
         return SystemProxy<Comps...>{reg};
     }
+    template<typename...Comps, size_t...Is>
+    EntityPtr DoEntt(std::index_sequence<Is...>, flags_t flags, Comps&...comps) {
+        bitecs_CreateCtx ctx;
+        ctx.query = QueryFor<Comps...>::value;
+        ctx.query.flags = flags;
+        ctx.count = 1;
+        void* storage[sizeof...(Comps)];
+        size_t created;
+        if (bitecs_entt_create(reg, &ctx, storage, &created)) {
+            ((new (storage[Is]) Comps(std::move(comps))), ...);
+            return EntityPtr{ctx.query.outEntts->generation, ctx.query.outIndex};
+        } else {
+            throw std::runtime_error("Could not create entity");
+        }
+    }
+    template<typename...Comps>
+    EntityPtr EnttWithFlags(flags_t flags, Comps...comps) {
+        return DoEntt(std::index_sequence_for<Comps...>{}, flags, comps...);
+    }
     template<typename...Comps>
     EntityPtr Entt(Comps...comps) {
-        static const Components<Comps...> c;
-        EntityPtr res;
-        void* temp[] = {&res, &comps...};
-        using seq = std::index_sequence_for<Comps...>;
-        using creator = impl::single_creator<seq, Comps...>;
-        if (!bitecs_entt_create(reg, 1, &c.list, creator::call, &temp)) {
-            throw std::runtime_error("Could not create entts");
-        }
-        return res;
+        return DoEntt(std::index_sequence_for<Comps...>{}, 0, comps...);
     }
-    template<typename...Comps, typename Fn>
+    template<typename...Comps, size_t...Is, typename Fn>
+    void DoEntts(std::index_sequence<Is...>, index_t count, flags_t flags, Fn& populate) {
+        bitecs_CreateCtx ctx;
+        ctx.query = QueryFor<Comps...>::value;
+        ctx.query.flags = flags;
+        ctx.count = count;
+        void* ptrs[sizeof...(Comps)];
+        size_t created;
+        while(bitecs_entt_create(reg, &ctx, ptrs, &created)) {
+            for (index_t i = 0; i < created; ++i) {
+                if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
+                    EntityPtr ptr;
+                    ptr.generation = ctx.query.outEntts[i].generation;
+                    ptr.index = ctx.query.outIndex + i;
+                    populate(ptr, (*new(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i)) Comps{})...);
+                } else {
+                    populate((*new(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i)) Comps{})...);
+                }
+            }
+        }
+    }
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
     void Entts(index_t count, Fn& populate) {
-        static const Components<Comps...> c;
-        using seq = std::index_sequence_for<Comps...>;
-        using creator = impl::multi_creator<Fn, seq, Comps...>;
-        if (!bitecs_entt_create(reg, count, &c.list, creator::call, reinterpret_cast<void*>(&populate))) {
-            throw std::runtime_error("Could not create entts");
-        }
+        DoEntts<Comps...>(std::index_sequence_for<Comps...>{}, count, 0, populate);
     }
-    template<typename...Comps, typename Fn>
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
     void Entts(index_t count, Fn&& populate) {
-        Entts<Comps...>(count, populate);
+        DoEntts<Comps...>(std::index_sequence_for<Comps...>{}, count, 0, populate);
+    }
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    void EnttsWithFlags(index_t count, flags_t flags, Fn&& populate) {
+        DoEntts<Comps...>(std::index_sequence_for<Comps...>{}, count, flags, populate);
+    }
+    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    void EnttsWithFlags(index_t count, flags_t flags, Fn& populate) {
+        DoEntts<Comps...>(std::index_sequence_for<Comps...>{}, count, flags, populate);
     }
     template<typename...Comps>
     void EnttsFromArrays(index_t count, Comps*...init) {
-        return Entts<Comps...>(count, [&](Comps&...out){
+        auto populate = [&](Comps&...out){
             ((out = std::move(*init++)), ...);
-        });
+        };
+        return DoEntts<Comps...>(std::index_sequence_for<Comps...>{}, count, 0, populate);
     }
 
     void Destroy(EntityPtr entt) {

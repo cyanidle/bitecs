@@ -12,12 +12,12 @@ set(CMAKE_C_STANDARD 17)
 option(BITECS_TEST "Build tests" OFF)
 option(BITECS_BENCH "Build bench" OFF)
 
-add_library(bitecs-core
-    src/bitecs_core.c
-    src/bitecs_mask.c
-    src/bitecs_private.h
-)
-target_compile_options(bitecs-core PRIVATE -fexceptions)
+add_library(bitecs-core src/bitecs_core.c)
+
+if (CMAKE_CXX_COMPILER_ID MATCHES GNU|Clang)
+    target_compile_options(bitecs-core PRIVATE -fno-semantic-interposition)
+endif()
+
 target_include_directories(bitecs-core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>

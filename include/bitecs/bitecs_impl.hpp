@@ -8,12 +8,6 @@
 #include <exception>
 #include <utility>
 
-#ifdef __GNUC__
-#define _BITECS_FLATTEN __attribute((flatten))
-#else
-#define _BITECS_FLATTEN
-#endif
-
 namespace bitecs
 {
 
@@ -26,7 +20,6 @@ using comp_id_t = bitecs_comp_id_t;
 using Entity = bitecs_Entity;
 using EntityProxy = bitecs_EntityProxy;
 using EntityPtr = bitecs_EntityPtr;
-using CallbackContext = bitecs_CallbackContext;
 
 template<typename T>
 struct component_info {
@@ -102,65 +95,5 @@ void deleter_for(void* begin, index_t count) {
         static_cast<T*>(begin)[i].~T();
     }
 }
-
-template<typename, typename, typename...>
-struct system_thunk;
-template<typename Fn, typename...Comps, size_t...Is>
-struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
-{
-    _BITECS_FLATTEN
-    static void call(void* udata, CallbackContext* ctx, void** outs, index_t count)
-    {
-        Fn& f = *reinterpret_cast<Fn*>(udata);
-        for (size_t i = 0; i < count; ++i) {
-            if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
-                EntityPtr ptr;
-                ptr.generation = ctx->entts[i].generation;
-                ptr.index = ctx->beginIndex + i;
-                f(ptr, *(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
-            } else {
-                f(*(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
-            }
-        }
-    }
-};
-
-template<typename, typename...>
-struct single_creator;
-template<typename...Comps, size_t...Is>
-struct single_creator<std::index_sequence<Is...>, Comps...> {
-
-    _BITECS_FLATTEN
-    static void call(void* udata, CallbackContext* ctx, void** outs, index_t)
-    {
-        void** sources = static_cast<void**>(udata);
-        auto* eptr = static_cast<EntityPtr*>(sources[0]);
-        eptr->generation = ctx->entts->generation;
-        eptr->index = ctx->beginIndex;
-        ((new (outs[Is]) Comps(std::move(*static_cast<Comps*>(sources[Is + 1])))), ...);
-    }
-};
-
-template<typename, typename, typename...>
-struct multi_creator;
-template<typename Fn, typename...Comps, size_t...Is>
-struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
-
-    _BITECS_FLATTEN
-    static void call(void* udata, CallbackContext* ctx, void** outs, index_t count)
-    {
-        Fn& f = *reinterpret_cast<Fn*>(udata);
-        for (index_t i = 0; i < count; ++i) {
-            if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
-                EntityPtr ptr;
-                ptr.generation = ctx->entts[i].generation;
-                ptr.index = ctx->beginIndex + i;
-                f(ptr, (*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);
-            } else {
-                f((*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);
-            }
-        }
-    }
-};
 
 }
