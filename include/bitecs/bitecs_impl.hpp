@@ -131,8 +131,6 @@ template<typename, typename...>
 struct single_creator;
 template<typename...Comps, size_t...Is>
 struct single_creator<std::index_sequence<Is...>, Comps...> {
-
-    _BITECS_FLATTEN
     static void call(void* udata, CallbackContext* ctx, void** outs, index_t)
     {
         void** sources = static_cast<void**>(udata);
