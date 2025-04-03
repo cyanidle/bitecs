@@ -184,7 +184,7 @@ void bitecs_registry_delete(bitecs_registry* reg)
     free(reg);
 }
 
-static index_t select_up_to_chunk(component_list* list, index_t begin, index_t count, void** outBegin)
+static index_t select_up_to_chunk(component_list* list, index_t begin, index_t count, bitecs_ptrs_t outBegin)
 {
     if (!list->meta.typesize) {
         *outBegin = 0;
@@ -203,7 +203,7 @@ static index_t select_up_to_chunk(component_list* list, index_t begin, index_t c
 static index_t query_match(index_t cursor, flags_t flags, const SparseMask* mask, const Ranks* ranks, const Entity* entts, index_t count);
 static index_t query_miss(index_t cursor, flags_t flags, const SparseMask* mask, const Ranks* ranks, const Entity* entts, index_t count);
 
-bool bitecs_system_step(bitecs_registry *reg, bitecs_QueryCtx* ctx, void** ptrs, size_t* outCount)
+bool bitecs_system_step(bitecs_registry *reg, bitecs_QueryCtx* ctx, bitecs_ptrs_t ptrs, size_t * __restrict__ outCount)
 {
     index_t begin = query_match(ctx->_cursor, ctx->flags, &ctx->mask, &ctx->ranks, reg->entities, reg->entities_count);
     if (unlikely(begin == reg->entities_count)) return false;
@@ -260,7 +260,7 @@ static bool reserve_chunks(component_list* list, index_t index, index_t count)
     return true;
 }
 
-static bool component_add_range(component_list* list, index_t index, index_t count, void** begin, index_t* added)
+static bool component_add_range(component_list* list, index_t index, index_t count, bitecs_ptrs_t begin, index_t* added)
 {
     if (unlikely(!count)) return false;
     if (!list->meta.typesize) {
@@ -359,7 +359,7 @@ static bool reserve_entts(bitecs_registry *reg, index_t count)
     return true;
 }
 
-bool bitecs_entt_create(bitecs_registry* reg, bitecs_CreateCtx* cctx, void** ptrs, size_t* batchSize)
+bool bitecs_entt_create(bitecs_registry* reg, bitecs_CreateCtx* cctx, bitecs_ptrs_t ptrs, size_t* __restrict__ batchSize)
 {
     bitecs_QueryCtx* ctx = &cctx->query;
     if (unlikely(!cctx->count)) return false;

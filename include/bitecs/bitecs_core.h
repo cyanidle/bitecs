@@ -133,8 +133,10 @@ typedef struct {
     bitecs_index_t count;
 } bitecs_CreateCtx;
 
+typedef void * __restrict__ * __restrict__ bitecs_ptrs_t;
+
 _BITECS_NODISCARD
-bool bitecs_entt_create(bitecs_registry* reg, bitecs_CreateCtx* ctx, void** ptrs, size_t* batchSize);
+bool bitecs_entt_create(bitecs_registry* reg, bitecs_CreateCtx* ctx, bitecs_ptrs_t ptrs, size_t* __restrict__ batchSize);
 void bitecs_entt_destroy(bitecs_registry* reg, bitecs_EntityPtr ptr);
 void bitecs_entt_destroy_batch(bitecs_registry* reg, const bitecs_EntityPtr* ptrs, size_t nptrs);
 
@@ -150,7 +152,7 @@ void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bite
 _BITECS_NODISCARD bitecs_EntityProxy* bitecs_entt_deref(bitecs_registry* reg, bitecs_EntityPtr ptr);
 
 _BITECS_NODISCARD
-bool bitecs_system_step(bitecs_registry* reg, bitecs_QueryCtx* ctx, void** ptrs, size_t* count);
+bool bitecs_system_step(bitecs_registry* reg, bitecs_QueryCtx* ctx, bitecs_ptrs_t ptrs, size_t* __restrict__ count);
 
 void bitecs_ranks_get(bitecs_Ranks* out, bitecs_dict_t dict);
 
