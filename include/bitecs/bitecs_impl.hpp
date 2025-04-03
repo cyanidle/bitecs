@@ -109,7 +109,7 @@ template<typename Fn, typename...Comps, size_t...Is>
 struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
 {
     _BITECS_FLATTEN
-    static void call(void* udata, CallbackContext* ctx, void** outs, index_t count)
+    static void call(bitecs_udata udata, CallbackContext* ctx, bitecs_ptrs outs, index_t count)
     {
         Fn& f = *reinterpret_cast<Fn*>(udata);
         for (size_t i = 0; i < count; ++i) {
@@ -131,7 +131,7 @@ template<typename, typename...>
 struct single_creator;
 template<typename...Comps, size_t...Is>
 struct single_creator<std::index_sequence<Is...>, Comps...> {
-    static void call(void* udata, CallbackContext* ctx, void** outs, index_t)
+    static void call(bitecs_udata udata, CallbackContext* ctx, bitecs_ptrs outs, index_t)
     {
         void** sources = static_cast<void**>(udata);
         auto* eptr = static_cast<EntityPtr*>(sources[0]);
@@ -147,7 +147,7 @@ template<typename Fn, typename...Comps, size_t...Is>
 struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
 
     _BITECS_FLATTEN
-    static void call(void* udata, CallbackContext* ctx, void** outs, index_t count)
+    static void call(bitecs_udata udata, CallbackContext* ctx, bitecs_ptrs outs, index_t count)
     {
         Fn& f = *reinterpret_cast<Fn*>(udata);
         for (index_t i = 0; i < count; ++i) {

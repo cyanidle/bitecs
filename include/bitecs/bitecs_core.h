@@ -118,7 +118,10 @@ typedef struct {
     bitecs_EntityProxy* entts;
 } bitecs_CallbackContext;
 
-typedef void (*bitecs_Callback)(void* udata, bitecs_CallbackContext* ctx, void** begins, bitecs_index_t count);
+typedef void* __restrict__ * __restrict__ bitecs_ptrs;
+typedef void* __restrict__ bitecs_udata;
+
+typedef void (*bitecs_Callback)(bitecs_udata udata, bitecs_CallbackContext* ctx, bitecs_ptrs begins, bitecs_index_t count);
 
 
 typedef struct
@@ -165,7 +168,7 @@ typedef struct
 
 typedef struct
 {
-    void** ptrStorage; //should have space for void*[ncomps]
+    bitecs_ptrs ptrStorage; //should have space for void*[ncomps]
     const int* components;
     int ncomps;
     bitecs_Callback system;

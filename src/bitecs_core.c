@@ -178,7 +178,7 @@ void bitecs_registry_delete(bitecs_registry* reg)
     free(reg);
 }
 
-static index_t select_up_to_chunk(component_list* list, index_t begin, index_t count, void** outBegin)
+static index_t select_up_to_chunk(component_list* list, index_t begin, index_t count, bitecs_ptrs outBegin)
 {
     if (!list->meta.typesize) {
         *outBegin = 0;
@@ -210,7 +210,7 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
     while (end > begin) {
         index_t count = end - begin;
         index_t smallestRange = ~(index_t)0;
-        void** begins = ctx->ptrStorage;
+        bitecs_ptrs begins = ctx->ptrStorage;
         for (int i = 0; i < ctx->ncomps; ++i) {
             int comp = ctx->components[i];
             index_t selected = select_up_to_chunk(reg->components[comp], begin, count, begins++);
@@ -281,7 +281,7 @@ static bool reserve_chunks(component_list* list, index_t index, index_t count)
     return true;
 }
 
-static bool component_add_range(component_list* list, index_t index, index_t count, void** begin, index_t* added)
+static bool component_add_range(component_list* list, index_t index, index_t count, bitecs_ptrs begin, index_t* added)
 {
     if (unlikely(!count)) return false;
     if (!list->meta.typesize) {
