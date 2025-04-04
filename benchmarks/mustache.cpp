@@ -22,9 +22,9 @@ struct Mustache
 
     template<typename...Components>
     Entity CreateOneEntt(Components&&...c) {
-        auto builder = world.entities().begin();
-        (builder.assign<Components>(), ...);
-        return builder.end();
+        auto e = world.entities().create<Components...>();
+        ((*world.entities().getComponent<Components>(e) = std::move(c)), ...);
+        return e;
     }
     template<typename...Components>
     void CreateManyEntts(size_t count, Components*...cs) {
@@ -52,6 +52,7 @@ struct Mustache
     }
 };
 
-ECS_BENCHMARKS(Mustache);
+// Segfaults on lots of allocations
+ECS_BENCHMARKS_NO_CREATE(Mustache);
 
 }

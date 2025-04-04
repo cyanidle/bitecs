@@ -145,6 +145,10 @@ static void Configurations(benchmark::internal::Benchmark* bench) {
     }
 }
 
+#define ECS_BENCHMARKS_NO_CREATE(ECS) \
+BENCHMARK(BM<ECS>)->Apply(Configurations); \
+BENCHMARK(BM_Modify_One<ECS>)
+
 #define ECS_BENCHMARKS(ECS) \
 BENCHMARK(BM<ECS>)->Apply(Configurations); \
 BENCHMARK(BM_Create_Destroy_Entities<ECS>)->Apply(Configurations); \
