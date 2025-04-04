@@ -13,13 +13,11 @@ BITECS_COMPONENT(VelocityComponent, 7);
 
 namespace bench0 {
 
-using namespace bitecs;
-
 struct Bitecs
 {
-    using Entity = EntityPtr;
+    using Entity = bitecs::EntityPtr;
 
-    Registry reg;
+    bitecs::Registry reg;
 
     template<typename...Components>
     void RegisterComponents() {

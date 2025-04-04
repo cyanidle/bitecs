@@ -29,12 +29,13 @@ class BitECS(ConanFile):
         self.test_requires("gtest/1.16.0")
         if self.options.bench:
             self.test_requires("benchmark/1.9.1")
+            self.test_requires("fastprng/cci.20200628")
+            self.test_requires("gsl-lite/0.42.0")
+
             self.test_requires("flecs/4.0.4")
             self.test_requires("entt/3.14.0")
             self.test_requires("entityx/1.3.0")
             self.test_requires("gaia-ecs/0.8.6")
-            self.test_requires("fastprng/cci.20200628")
-            self.test_requires("gsl-lite/0.42.0")
 
     def generate(self):
         deps = CMakeDeps(self)
