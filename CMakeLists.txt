@@ -12,12 +12,14 @@ set(CMAKE_C_STANDARD 17)
 option(BITECS_TEST "Build tests" OFF)
 option(BITECS_BENCH "Build bench" OFF)
 
-add_library(bitecs-core
-    src/bitecs_core.c
+add_library(bitecs-core src/bitecs_core.c)
 
+if (CMAKE_COMPILER_IS_GNUCC)
+    target_compile_options(bitecs-core PRIVATE
+        -fexceptions
+    )
+endif()
 
-)
-target_compile_options(bitecs-core PRIVATE -fexceptions)
 target_include_directories(bitecs-core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
