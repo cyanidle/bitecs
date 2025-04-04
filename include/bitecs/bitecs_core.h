@@ -72,8 +72,11 @@ typedef struct
 typedef struct {
     bitecs_dict_t select_dict_masks[BITECS_GROUPS_COUNT];
     int group_ranks[BITECS_GROUPS_COUNT];
+    bitecs_dict_t highest_select_mask;
     int groups_count;
 } bitecs_Ranks;
+
+void bitecs_ranks_get(bitecs_Ranks* out, bitecs_dict_t dict);
 
 typedef struct bitecs_registry bitecs_registry;
 
@@ -179,8 +182,6 @@ typedef struct
 
 _BITECS_NODISCARD
 bool bitecs_system_step(bitecs_registry* reg, bitecs_SystemStepCtx* ctx);
-
-void bitecs_ranks_get(bitecs_Ranks* out, bitecs_dict_t dict);
 
 // idxs must be sorted!
 _BITECS_NODISCARD

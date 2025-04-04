@@ -552,6 +552,7 @@ void bitecs_ranks_get(bitecs_Ranks* res, dict_t dict)
         dict >>= trailing + 1;
         rank++;
     }
+    res->highest_select_mask = res->select_dict_masks[res->groups_count - 1];
 }
 
 static mask_t relocate_part(dict_t dictDiff, mask_t mask, int index, const dict_t* restrict rankMasks) {
@@ -572,12 +573,6 @@ static mask_t adjust_for(dict_t diff, mask_t qmask, const dict_t* restrict rankM
     return r0 | r1 | r2 | r3;
 }
 
-static bool needs_adjust(dict_t diff, const bitecs_Ranks *ranks)
-{
-    return diff & ranks->select_dict_masks[ranks->groups_count - 1];
-    // if any relocations (at least on biggest mask) -> dicts are incompatible
-}
-
 static index_t bitecs_query_match(
     bitecs_index_t cursor, const bitecs_QueryContext* ctx,
     const bitecs_Entity* entts, index_t count)
@@ -592,7 +587,7 @@ static index_t bitecs_query_match(
         if ((entt->flags & flags) != flags) continue;
         if ((edict & qdict) != qdict) continue;
         dict_t diff = edict ^ qdict;
-        bool adjust = needs_adjust(diff, ranks);
+        bool adjust = diff & ranks->highest_select_mask;
         mask_t mask = query->bits;
         if (adjust) {
             mask = adjust_for(diff, query->bits, ranks->select_dict_masks);
@@ -627,7 +622,7 @@ static bitecs_index_t bitecs_query_miss(
             return cursor;
         }
         dict_t diff = entt->dict ^ current->dict;
-        bool adjust = needs_adjust(diff, ranks);
+        bool adjust = diff & ranks->highest_select_mask;
         mask_t mask = current->bits;
         if (unlikely(adjust)) {
             mask = adjust_for(diff, current->bits, ranks->select_dict_masks);
