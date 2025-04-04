@@ -23,7 +23,7 @@ struct Bitecs
 
     template<typename...Components>
     void RegisterComponents() {
-        (reg.DefineComponent<Components>() && ...);
+        (reg.DefineComponent<Components>(bitecs_freq9) && ...);
     }
 
     template<typename...Components>

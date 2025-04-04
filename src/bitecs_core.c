@@ -637,6 +637,7 @@ static bitecs_index_t bitecs_query_miss(
     return cursor;
 }
 
+_BITECS_FLATTEN
 bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state)
 {
     int group = index >> BITECS_GROUP_SHIFT;
@@ -666,6 +667,7 @@ bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state)
     return true;
 }
 
+_BITECS_FLATTEN
 bool bitecs_mask_get(const bitecs_SparseMask* mask, int index)
 {
     int group = index >> BITECS_GROUP_SHIFT;
@@ -678,6 +680,7 @@ bool bitecs_mask_get(const bitecs_SparseMask* mask, int index)
     return dict_match && bits_match;
 }
 
+_BITECS_FLATTEN
 bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count)
 {
 #ifndef NDEBUG
@@ -728,6 +731,7 @@ static void expand_one(int bitOffset, uint32_t part, int offset, bitecs_BitsStor
     }
 }
 
+_BITECS_FLATTEN
 int bitecs_mask_into_array(const bitecs_SparseMask *mask, const bitecs_Ranks *ranks, bitecs_BitsStorage *storage)
 {
     const uint32_t* groups = (const uint32_t*)&mask->bits;

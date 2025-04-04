@@ -8,8 +8,10 @@
 #include <stdbool.h>
 
 #ifdef __GNUC__
+#define _BITECS_FLATTEN __attribute((flatten))
 #define _BITECS_NODISCARD __attribute__ ((__warn_unused_result__))
 #else
+#define _BITECS_FLATTEN
 #define _BITECS_NODISCARD
 #endif
 

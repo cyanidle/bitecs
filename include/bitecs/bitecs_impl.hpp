@@ -8,12 +8,6 @@
 #include <exception>
 #include <utility>
 
-#ifdef __GNUC__
-#define _BITECS_FLATTEN __attribute((flatten))
-#else
-#define _BITECS_FLATTEN
-#endif
-
 namespace bitecs
 {
 
