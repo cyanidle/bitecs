@@ -5,7 +5,7 @@
 BITECS_COMPONENT(HealthComponent, 0);
 BITECS_COMPONENT(PlayerComponent, 1);
 BITECS_COMPONENT(DataComponent, 2);
-BITECS_COMPONENT(EmptyComponent, 3);
+BITECS_COMPONENT(SmallComponent, 3);
 BITECS_COMPONENT(DamageComponent, 4);
 BITECS_COMPONENT(PositionComponent, 5);
 BITECS_COMPONENT(SpriteComponent, 6);

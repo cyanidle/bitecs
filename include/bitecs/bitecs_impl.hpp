@@ -40,12 +40,6 @@ template<> struct bitecs::component_info<T> { \
 namespace bitecs::impl
 {
 
-template<typename T>
-struct EmptyDetect : T {int dummy;};
-
-template<typename T>
-constexpr bool is_empty = sizeof(EmptyDetect<T>) == sizeof(int);
-
 template<typename...Comps>
 constexpr bool no_duplicates() {
     int res[] = {component_id<Comps>...};
@@ -111,11 +105,11 @@ struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
                 EntityPtr ptr;
                 ptr.generation = ctx->entts[i].generation;
                 ptr.index = ctx->beginIndex + i;
-                f(ptr, *(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
+                f(ptr, *(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i))...);
             } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
-                f(ctx->entts + i, *(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
+                f(ctx->entts + i, *(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i))...);
             } else {
-                f(*(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
+                f(*(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i))...);
             }
         }
     }
@@ -149,11 +143,11 @@ struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
                 EntityPtr ptr;
                 ptr.generation = ctx->entts[i].generation;
                 ptr.index = ctx->beginIndex + i;
-                f(ptr, (*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);
+                f(ptr, (*new(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i)) Comps{})...);
             } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
-                f(ctx->entts + i, (*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);
+                f(ctx->entts + i, (*new(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i)) Comps{})...);
             } else {
-                f((*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);
+                f((*new(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i)) Comps{})...);
             }
         }
     }

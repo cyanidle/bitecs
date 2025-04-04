@@ -65,7 +65,7 @@ struct Registry
 
     template<typename T>
     bool DefineComponent(bitecs_Frequency freq = bitecs_Frequency::bitecs_freq5) {
-        bitecs_ComponentMeta meta {impl::is_empty<T> ? 0 : sizeof(T), freq, nullptr};
+        bitecs_ComponentMeta meta {std::is_empty_v<T> ? 0 : sizeof(T), freq, nullptr};
         if (!std::is_trivially_destructible_v<T>) {
             meta.deleter = impl::deleter_for<T>;
         }

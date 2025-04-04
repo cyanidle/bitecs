@@ -50,6 +50,7 @@ if (BITECS_BENCH)
     find_package(gaia REQUIRED)
     find_package(fastprng REQUIRED)
     find_package(EnTT REQUIRED)
+    find_package(entityx REQUIRED)
 
     file(GLOB benches CONFIGURE_DEPENDS benchmarks/*.cpp)
     add_executable(bitecs_bench ${benches})
@@ -58,6 +59,7 @@ if (BITECS_BENCH)
         benchmark::benchmark_main
         gsl::gsl-lite
         EnTT::EnTT
+        entityx::entityx
         gaia::gaia
         flecs::flecs_static
         fastprng::fastprng
