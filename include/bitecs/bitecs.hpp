@@ -85,7 +85,7 @@ struct Registry
 
     template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
     void RunSystem(Fn&& f) {
-        RunSystem<Comps...>(0, std::forward<Fn>(f));
+        RunSystem<Comps...>(0, f);
     }
     template<typename...Comps>
     EntityPtr Entt(Comps...comps) {

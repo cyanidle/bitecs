@@ -28,7 +28,7 @@ TEST(Systems, Basic)
     Registry reg;
     reg.DefineComponent<Component1>(bitecs_freq3);
     reg.DefineComponent<Component2>(bitecs_freq5);
-    reg.DefineComponent<Component3>(bitecs_rare);
+    reg.DefineComponent<Component3>(bitecs_freq9);
     int prev_counts = 1;
     for (int i: counts) {
         (void)reg.Entt(Component1{}, Component2{});

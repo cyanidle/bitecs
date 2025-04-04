@@ -118,7 +118,7 @@ struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
                 ptr.generation = ctx->entts[i].generation;
                 ptr.index = ctx->beginIndex + i;
                 f(ptr, *(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
-            } if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
+            } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
                 f(ctx->entts + i, *(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
             } else {
                 f(*(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i))...);
@@ -156,7 +156,7 @@ struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
                 ptr.generation = ctx->entts[i].generation;
                 ptr.index = ctx->beginIndex + i;
                 f(ptr, (*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);
-            } if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
+            } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
                 f(ctx->entts + i, (*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);
             } else {
                 f((*new(static_cast<Comps*>(outs[Is]) + (is_empty<Comps> ? 0 : i)) Comps{})...);
