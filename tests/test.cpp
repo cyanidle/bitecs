@@ -77,11 +77,6 @@ TEST(Entts, MultiCreate) {
         });
         CHECK(iter == count);
         iter = 0;
-        reg.RunSystem<>([&](EntityPtr ptr){
-            iter++;
-        });
-        CHECK(iter == count + prev_counts);
-        iter = 0;
         reg.RunSystem<Component1, Component2>([&](Component1& c1, Component2& c2){
             iter++;
         });

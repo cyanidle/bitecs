@@ -1,16 +1,14 @@
 ﻿#include "components.hpp"
 #include "benchmark.hpp"
-#include <flecs.h>
+#include <ginseng/ginseng.hpp>
 
+namespace bench5 {
 
-namespace bench4 {
-
-
-struct Flecs
+struct Ginseng
 {
-    flecs::world world;
+    ginseng::database db;
 
-    using Entity = flecs::entity;
+    using Entity = ginseng::database::ent_id;
 
     template<typename...Components>
     void RegisterComponents() {
@@ -19,8 +17,8 @@ struct Flecs
 
     template<typename...Components>
     Entity CreateOneEntt(Components&&...c) {
-        auto e = world.entity();
-        (e.emplace<Components>(std::move(c)), ...);
+        auto e = db.create_entity();
+        (db.add_component(e, std::move(c)), ...);
         return e;
     }
     template<typename...Components>
@@ -31,24 +29,24 @@ struct Flecs
     }
     template<typename...Components, typename System>
     void RunSystem(System&& system) {
-        world.query<Components...>().each([&](Components&...cs){
+        db.visit([&](Components&...cs) {
             system(cs...);
         });
     }
     template<typename Component>
     void AddComponentTo(Entity entt, Component c) {
-        entt.emplace<Component>(std::move(c));
+        db.add_component(entt, std::move(c));
     }
     template<typename Component>
     void RemoveComponentFrom(Entity entt) {
-        entt.remove<Component>();
+        db.remove_component<Component>(entt);
     }
     template<typename Component>
     Component& GetComponent(Entity entt) {
-        return *entt.get_ref<Component>().get();
+        return db.get_component<Component>(entt);
     }
 };
 
-ECS_BENCHMARKS(Flecs);
+ECS_BENCHMARKS(Ginseng);
 
 }

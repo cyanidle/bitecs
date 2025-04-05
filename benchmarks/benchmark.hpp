@@ -23,7 +23,7 @@ template<typename ECS>
 static typename ECS::Entity CreateProtag(ECS& ecs)
 {
     ecs.template RegisterComponents<
-        HealthComponent, PlayerComponent, DataComponent, EmptyComponent,
+        HealthComponent, PlayerComponent, DataComponent, SmallComponent,
         DamageComponent, PositionComponent, SpriteComponent, VelocityComponent
     >();
     return ecs.CreateOneEntt(
@@ -44,12 +44,12 @@ static void CreateEntities(benchmark::State& state, ECS& ecs)
     size_t nmonsters = state.range(2);
 
     ecs.template RegisterComponents<
-        HealthComponent, PlayerComponent, DataComponent, EmptyComponent,
+        HealthComponent, PlayerComponent, DataComponent, SmallComponent,
         DamageComponent, PositionComponent, SpriteComponent, VelocityComponent
     >();
 
     std::vector<DataComponent> datas(ndata);
-    std::vector<EmptyComponent> empt(ndata);
+    std::vector<SmallComponent> empt(ndata);
     ecs.CreateManyEntts(ndata, datas.data(), empt.data());
 
     std::vector<DataComponent> alive_datas(nheroes + nmonsters);
@@ -140,12 +140,14 @@ static void BM_Modify_One(benchmark::State& state)
 static void Configurations(benchmark::internal::Benchmark* bench) {
     bench->ArgNames({"datas", "heroes", "monsters"});
     const auto matrix = {10, 2000, 30000, 500'000};
-    for (long datas: matrix) {
-        for (long alive: matrix) {
-             bench->Args({datas, alive, alive});
-        }
+    for (long count: matrix) {
+        bench->Args({count, count, count});
     }
 }
+
+#define ECS_BENCHMARKS_NO_CREATE(ECS) \
+BENCHMARK(BM<ECS>)->Apply(Configurations); \
+BENCHMARK(BM_Modify_One<ECS>)
 
 #define ECS_BENCHMARKS(ECS) \
 BENCHMARK(BM<ECS>)->Apply(Configurations); \

@@ -1,16 +1,16 @@
 ﻿#include "components.hpp"
 #include "benchmark.hpp"
-#include <flecs.h>
+#include <entityx/entityx.h>
 
 
-namespace bench4 {
+namespace bench3 {
 
 
-struct Flecs
+struct EntityX
 {
-    flecs::world world;
+    entityx::EntityX ex;
 
-    using Entity = flecs::entity;
+    using Entity = entityx::Entity;
 
     template<typename...Components>
     void RegisterComponents() {
@@ -19,8 +19,8 @@ struct Flecs
 
     template<typename...Components>
     Entity CreateOneEntt(Components&&...c) {
-        auto e = world.entity();
-        (e.emplace<Components>(std::move(c)), ...);
+        Entity e = ex.entities.create();
+        (e.assign<Components>(std::move(c)), ...);
         return e;
     }
     template<typename...Components>
@@ -31,13 +31,13 @@ struct Flecs
     }
     template<typename...Components, typename System>
     void RunSystem(System&& system) {
-        world.query<Components...>().each([&](Components&...cs){
+        ex.entities.each<Components...>([&](Entity, Components&...cs){
             system(cs...);
         });
     }
     template<typename Component>
     void AddComponentTo(Entity entt, Component c) {
-        entt.emplace<Component>(std::move(c));
+        entt.assign<Component>(std::move(c));
     }
     template<typename Component>
     void RemoveComponentFrom(Entity entt) {
@@ -45,10 +45,10 @@ struct Flecs
     }
     template<typename Component>
     Component& GetComponent(Entity entt) {
-        return *entt.get_ref<Component>().get();
+        return *entt.component<Component>();
     }
 };
 
-ECS_BENCHMARKS(Flecs);
+ECS_BENCHMARKS(EntityX);
 
 }

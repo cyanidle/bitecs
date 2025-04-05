@@ -502,6 +502,7 @@ void bitecs_ranks_get(bitecs_Ranks* res, dict_t dict)
         dict >>= trailing + 1;
         rank++;
     }
+    res->highest_select_mask = res->select_dict_masks[res->groups_count - 1];
 }
 
 static mask_t relocate_part(dict_t dictDiff, mask_t mask, int index, const dict_t* restrict rankMasks) {
@@ -522,13 +523,6 @@ static mask_t adjust_for(dict_t diff, mask_t qmask, const dict_t* restrict rankM
     return r0 | r1 | r2 | r3;
 }
 
-static bool needs_adjust(dict_t diff, const bitecs_Ranks *ranks)
-{
-    return diff & ranks->select_dict_masks[ranks->groups_count - 1];
-    // if any relocations (at least on biggest mask) -> dicts are incompatible
-}
-
-__attribute((noinline))
 static index_t query_match(
     bitecs_index_t cursor, flags_t flags, const SparseMask* query,
     const Ranks* ranks, const bitecs_Entity* entts, index_t count)
@@ -540,7 +534,7 @@ static index_t query_match(
         if ((entt->flags & flags) != flags) continue;
         if ((edict & qdict) != qdict) continue;
         dict_t diff = edict ^ qdict;
-        bool adjust = needs_adjust(diff, ranks);
+        bool adjust = diff & ranks->highest_select_mask;
         mask_t mask = query->bits;
         if (adjust) {
             mask = adjust_for(diff, query->bits, ranks->select_dict_masks);
@@ -562,7 +556,7 @@ static index_t query_miss(
         const Entity* entt = entts + cursor;
         if ((entt->flags & flags) != flags) return cursor;
         dict_t diff = entt->dict ^ query->dict;
-        bool adjust = needs_adjust(diff, ranks);
+        bool adjust = diff & ranks->highest_select_mask;
         mask_t mask = query->bits;
         if (unlikely(adjust)) {
             mask = adjust_for(diff, query->bits, ranks->select_dict_masks);
@@ -574,40 +568,7 @@ static index_t query_miss(
     return cursor;
 }
 
-// static index_t query_miss(
-//     bitecs_index_t cursor, flags_t flags, const SparseMask* query,
-//     const Ranks* ranks, const bitecs_Entity* entts, index_t count)
-// {
-//     SparseMask adjusted;
-//     const SparseMask* current = query;
-//     for (;cursor < count; ++cursor) {
-//         const Entity* entt = entts + cursor;
-//     again:
-//         if ((entt->flags & flags) != flags) return cursor;
-//         if ((entt->dict & current->dict) != current->dict) {
-//             // missmatch on adjusted query is not definitive!
-//             if (current != query) {
-//                 current = query;
-//                 goto again;
-//             }
-//             return cursor;
-//         }
-//         dict_t diff = entt->dict ^ current->dict;
-//         bool adjust = needs_adjust(diff, ranks);
-//         mask_t mask = current->bits;
-//         if (unlikely(adjust)) {
-//             mask = adjust_for(diff, current->bits, ranks->select_dict_masks);
-//             adjusted.bits = mask;
-//             adjusted.dict = entt->dict;
-//             current = &adjusted;
-//         }
-//         if ((entt->components & mask) != mask) {
-//             return cursor;
-//         }
-//     }
-//     return cursor;
-// }
-
+_BITECS_FLATTEN
 bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state)
 {
     int group = index >> BITECS_GROUP_SHIFT;
@@ -637,6 +598,7 @@ bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state)
     return true;
 }
 
+_BITECS_FLATTEN
 bool bitecs_mask_get(const bitecs_SparseMask* mask, int index)
 {
     int group = index >> BITECS_GROUP_SHIFT;
@@ -649,6 +611,7 @@ bool bitecs_mask_get(const bitecs_SparseMask* mask, int index)
     return dict_match && bits_match;
 }
 
+_BITECS_FLATTEN
 bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count)
 {
 #ifndef NDEBUG
@@ -699,6 +662,7 @@ static void expand_one(int bitOffset, uint32_t part, int offset, bitecs_BitsStor
     }
 }
 
+_BITECS_FLATTEN
 int bitecs_mask_into_array(const bitecs_SparseMask *mask, const bitecs_Ranks *ranks, bitecs_BitsStorage *storage)
 {
     const uint32_t* groups = (const uint32_t*)&mask->bits;

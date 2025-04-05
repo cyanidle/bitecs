@@ -1,16 +1,19 @@
 ﻿#include "components.hpp"
 #include "benchmark.hpp"
-#include <flecs.h>
+#include <mustache/ecs/world.hpp>
+#include <mustache/ecs/job.hpp>
 
 
-namespace bench4 {
+namespace bench6 {
 
 
-struct Flecs
+struct Mustache
 {
-    flecs::world world;
+    mustache::World world;
 
-    using Entity = flecs::entity;
+    static constexpr mustache::FunctionSafety unsafe = mustache::FunctionSafety::kUnsafe;
+
+    using Entity = mustache::Entity;
 
     template<typename...Components>
     void RegisterComponents() {
@@ -19,8 +22,8 @@ struct Flecs
 
     template<typename...Components>
     Entity CreateOneEntt(Components&&...c) {
-        auto e = world.entity();
-        (e.emplace<Components>(std::move(c)), ...);
+        auto e = world.entities().create<Components...>();
+        ((*world.entities().getComponent<Components>(e) = std::move(c)), ...);
         return e;
     }
     template<typename...Components>
@@ -31,24 +34,25 @@ struct Flecs
     }
     template<typename...Components, typename System>
     void RunSystem(System&& system) {
-        world.query<Components...>().each([&](Components&...cs){
+        world.entities().forEach([&](Components&...cs) {
             system(cs...);
-        });
+        }, mustache::JobRunMode::kCurrentThread);
     }
     template<typename Component>
     void AddComponentTo(Entity entt, Component c) {
-        entt.emplace<Component>(std::move(c));
+        world.entities().assign<Component>(entt, std::move(c));
     }
     template<typename Component>
     void RemoveComponentFrom(Entity entt) {
-        entt.remove<Component>();
+        world.entities().removeComponent<Component>(entt);
     }
     template<typename Component>
     Component& GetComponent(Entity entt) {
-        return *entt.get_ref<Component>().get();
+        return *world.entities().getComponent<Component>(entt);
     }
 };
 
-ECS_BENCHMARKS(Flecs);
+// Segfaults on lots of allocations
+ECS_BENCHMARKS_NO_CREATE(Mustache);
 
 }

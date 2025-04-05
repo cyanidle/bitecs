@@ -39,12 +39,6 @@ template<> struct bitecs::component_info<T> { \
 namespace bitecs::impl
 {
 
-template<typename T>
-struct EmptyDetect : T {int dummy;};
-
-template<typename T>
-constexpr bool is_empty = sizeof(EmptyDetect<T>) == sizeof(int);
-
 template<typename...Comps>
 constexpr bool no_duplicates() {
     int res[] = {component_id<Comps>...};

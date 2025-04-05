@@ -1,11 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(bitecs C CXX)
 
-if (NOT CONAN_BUILDING)
-    set(CONAN_INSTALL_ARGS "--build=missing;-o;bench=True" CACHE STRING "Override default conan opts")
-    include(cmake/conan2.cmake)
-endif()
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 17)
 
@@ -14,8 +9,10 @@ option(BITECS_BENCH "Build bench" OFF)
 
 add_library(bitecs-core src/bitecs_core.c)
 
-if (CMAKE_CXX_COMPILER_ID MATCHES GNU|Clang)
-    target_compile_options(bitecs-core PRIVATE -fno-semantic-interposition)
+if (CMAKE_COMPILER_IS_GNUCC)
+    target_compile_options(bitecs-core PRIVATE
+        -fexceptions
+    )
 endif()
 
 target_include_directories(bitecs-core PUBLIC
@@ -41,6 +38,16 @@ if (BITECS_TEST)
 endif()
 
 if (BITECS_BENCH)
+    if (NOT CONAN_BUILDING)
+        set(CONAN_INSTALL_ARGS "--build=missing;-o;bench=True" CACHE STRING "Override default conan opts")
+        include(cmake/conan2.cmake)
+    endif()
+    include(cmake/get_cpm.cmake)
+
+    set(MUSTACHE_BUILD_SHARED OFF CACHE BOOL "override")
+    CPMAddPackage("gh:kirillochnev/mustache#cb18149")
+    CPMAddPackage("gh:apples/ginseng@1.1")
+
     message(STATUS "Building benchmarks")
     find_package(benchmark REQUIRED)
     find_package(gsl-lite REQUIRED)
@@ -48,6 +55,7 @@ if (BITECS_BENCH)
     find_package(gaia REQUIRED)
     find_package(fastprng REQUIRED)
     find_package(EnTT REQUIRED)
+    find_package(entityx REQUIRED)
 
     file(GLOB benches CONFIGURE_DEPENDS benchmarks/*.cpp)
     add_executable(bitecs_bench ${benches})
@@ -56,9 +64,12 @@ if (BITECS_BENCH)
         benchmark::benchmark_main
         gsl::gsl-lite
         EnTT::EnTT
+        entityx::entityx
         gaia::gaia
         flecs::flecs_static
         fastprng::fastprng
+        ginseng
+        mustache
     )
     add_test(NAME bitecs_bench COMMAND $<TARGET_FILE:bitecs_bench>)
 endif()

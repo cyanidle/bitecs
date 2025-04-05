@@ -70,7 +70,7 @@ struct Registry
 
     template<typename T>
     bool DefineComponent(bitecs_Frequency freq = bitecs_Frequency::bitecs_freq5) {
-        bitecs_ComponentMeta meta {impl::is_empty<T> ? 0 : sizeof(T), freq, nullptr};
+        bitecs_ComponentMeta meta {std::is_empty_v<T> ? 0 : sizeof(T), freq, nullptr};
         if (!std::is_trivially_destructible_v<T>) {
             meta.deleter = impl::deleter_for<T>;
         }
@@ -88,11 +88,11 @@ struct Registry
                     EntityPtr ptr;
                     ptr.generation = query.outEntts[i].generation;
                     ptr.index = query.outIndex + i;
-                    f(ptr, *(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
+                    f(ptr, *(static_cast<Comps*>(ptrs[Is]) + (std::is_empty_v<Comps> ? 0 : i))...);
                 } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
-                    f(query.outEntts + i, *(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
+                    f(query.outEntts + i, *(static_cast<Comps*>(ptrs[Is]) + (std::is_empty_v<Comps> ? 0 : i))...);
                 } else {
-                    f(*(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i))...);
+                    f(*(static_cast<Comps*>(ptrs[Is]) + (std::is_empty_v<Comps> ? 0 : i))...);
                 }
             }
         }
@@ -150,11 +150,11 @@ struct Registry
                     EntityPtr ptr;
                     ptr.generation = ctx.query.outEntts[i].generation;
                     ptr.index = ctx.query.outIndex + i;
-                    populate(ptr, (*new(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i)) Comps{})...);
+                    populate(ptr, (*new(static_cast<Comps*>(ptrs[Is]) + (std::is_empty_v<Comps> ? 0 : i)) Comps{})...);
                 } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
-                    f(ctx.query.outEntts + i, (*new(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i)) Comps{})...);
+                    f(ctx.query.outEntts + i, (*new(static_cast<Comps*>(ptrs[Is]) + (std::is_empty_v<Comps> ? 0 : i)) Comps{})...);
                 } else {
-                    populate((*new(static_cast<Comps*>(ptrs[Is]) + (impl::is_empty<Comps> ? 0 : i)) Comps{})...);
+                    populate((*new(static_cast<Comps*>(ptrs[Is]) + (std::is_empty_v<Comps> ? 0 : i)) Comps{})...);
                 }
             }
         }

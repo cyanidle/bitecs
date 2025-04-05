@@ -20,7 +20,7 @@ struct DataComponent {
     DataComponent() : rng(seed), numgy(rng.xorShift()) {}
 };
 
-struct EmptyComponent {};
+struct SmallComponent {int dummy;};
 
 inline constexpr char PlayerSprite = '@';
 inline constexpr char MonsterSprite = 'k';

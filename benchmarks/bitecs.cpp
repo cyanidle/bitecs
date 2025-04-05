@@ -5,7 +5,7 @@
 BITECS_COMPONENT(HealthComponent, 0);
 BITECS_COMPONENT(PlayerComponent, 1);
 BITECS_COMPONENT(DataComponent, 2);
-BITECS_COMPONENT(EmptyComponent, 3);
+BITECS_COMPONENT(SmallComponent, 3);
 BITECS_COMPONENT(DamageComponent, 4);
 BITECS_COMPONENT(PositionComponent, 5);
 BITECS_COMPONENT(SpriteComponent, 6);
@@ -13,17 +13,15 @@ BITECS_COMPONENT(VelocityComponent, 7);
 
 namespace bench0 {
 
-using namespace bitecs;
-
 struct Bitecs
 {
-    using Entity = EntityPtr;
+    using Entity = bitecs::EntityPtr;
 
-    Registry reg;
+    bitecs::Registry reg;
 
     template<typename...Components>
     void RegisterComponents() {
-        (reg.DefineComponent<Components>() && ...);
+        (reg.DefineComponent<Components>(bitecs_freq9) && ...);
     }
 
     template<typename...Components>
