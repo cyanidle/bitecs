@@ -198,7 +198,12 @@ _BITECS_NODISCARD
 int bitecs_mask_into_array(
     const bitecs_SparseMask* mask, const bitecs_Ranks* ranks, bitecs_BitsStorage* storage);
 
-void _bitecs_sanity_test(bitecs_SparseMask* out);
+
+typedef struct bitecs_cleanup_data bitecs_cleanup_data;
+
+// Deferred cleanup API:
+_BITECS_NODISCARD bitecs_cleanup_data* bitecs_cleanup_prepare(bitecs_registry* reg);
+void bitecs_cleanup(bitecs_registry* reg, bitecs_cleanup_data* data);
 
 #ifdef __cplusplus
 }

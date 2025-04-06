@@ -146,8 +146,6 @@ TEST(Mask, Ranks)
 
 TEST(Mask, GetSet) {
     bitecs_SparseMask mask{};
-    _bitecs_sanity_test(&mask);
-    CHECK(mask.bits != 0);
     mask.bits = 0;
     CHECK(bitecs_mask_set(&mask, 1, true) == true);
     CHECK(bitecs_mask_get(&mask, 1) == true);

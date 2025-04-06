@@ -50,7 +50,8 @@ struct Gaia
     }
     template<typename Component>
     void AddComponentTo(Entity entt, Component c) {
-        w.add(entt, std::move(c));
+        w.add<Component>(entt);
+        w.set<Component>(entt) = std::move(c);
     }
     template<typename Component>
     void RemoveComponentFrom(Entity entt) {

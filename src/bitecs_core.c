@@ -3,6 +3,7 @@
 #include "bitecs/bitecs_core.h"
 #include <assert.h>
 #include <limits.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -140,6 +141,7 @@ struct bitecs_registry
     index_t total_free;
     bitecs_generation_t generation;
     component_list* components[BITECS_MAX_COMPONENTS];
+    _Atomic(bool) chunks_cleanup_pending;
 };
 
 bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta)
@@ -322,7 +324,7 @@ void *bitecs_entt_add_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bite
     }
     void* begin = NULL;
     index_t added;
-    if (reserve_chunks(list, ptr.index, 1)) {
+    if (likely(reserve_chunks(list, ptr.index, 1))) {
         // no need to check here! begin wont get reassigned
         (void)component_add_range(list, ptr.index, 1, &begin, &added);
     }
@@ -359,7 +361,7 @@ bool bitecs_entt_remove_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bi
         list->meta.deleter(comp, 1);
     }
     if (list->nalives[chunk]-- == 1) {
-        free(list->chunks[chunk]);
+        atomic_store_explicit(&reg->chunks_cleanup_pending, true, memory_order_relaxed);
     }
     return bitecs_mask_set((SparseMask*)e, id, false);
 }
@@ -709,11 +711,6 @@ bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idx
     return true;
 }
 
-void _bitecs_sanity_test(bitecs_SparseMask *out)
-{
-    out->bits = (mask_t)1 << 95;
-}
-
 static void expand_one(int bitOffset, uint32_t part, int offset, bitecs_BitsStorage *storage) {
     int bit = 0;
     int out = 0;
@@ -741,3 +738,70 @@ int bitecs_mask_into_array(const bitecs_SparseMask *mask, const bitecs_Ranks *ra
     return pcnt0 + pcnt1 + pcnt2 + pcnt3;
 }
 
+typedef struct {
+    int comp_id;
+    size_t chunk;
+} chunk_cleanup_data;
+
+struct bitecs_cleanup_data {
+    unsigned chunks_cap;
+    unsigned nchunks;
+    chunk_cleanup_data* chunks;
+};
+
+static bool add_to_cleanup(bitecs_cleanup_data* data, chunk_cleanup_data cd) {
+    if (data->chunks_cap == data->nchunks) {
+        unsigned newCap = data->chunks_cap ? data->chunks_cap * 2 : 2;
+        chunk_cleanup_data* newData = malloc(sizeof(chunk_cleanup_data) * newCap);
+        if (unlikely(!newData)) return false;
+        if (data->chunks) {
+            memcpy(newData, data->chunks, sizeof(chunk_cleanup_data) * data->nchunks);
+        }
+        free(data->chunks);
+        data->chunks = newData;
+        data->chunks_cap = newCap;
+    }
+    data->chunks[data->nchunks++] = cd;
+    return true;
+}
+
+static void destroy_cleanup(bitecs_cleanup_data* data) {
+    free(data->chunks);
+    free(data);
+}
+
+bitecs_cleanup_data *bitecs_cleanup_prepare(bitecs_registry *reg)
+{
+    bitecs_cleanup_data* res = malloc(sizeof(bitecs_cleanup_data));
+    if (!res) return NULL;
+    *res = (bitecs_cleanup_data){0};
+    if (reg->chunks_cleanup_pending) {
+        for (int comp = 0; comp < BITECS_MAX_COMPONENTS; ++comp) {
+            component_list* list = reg->components[comp];
+            for (size_t ch = 0; ch < list->nchunks; ++ch) {
+                if (!list->chunks[ch]) {
+                    chunk_cleanup_data cd;
+                    cd.comp_id = comp;
+                    cd.chunk = ch;
+                    if (!add_to_cleanup(res, cd)) goto err;
+                }
+            }
+        }
+    }
+    return res;
+err:
+    destroy_cleanup(res);
+    return NULL;
+}
+
+void bitecs_cleanup(bitecs_registry *reg, bitecs_cleanup_data *data)
+{
+    reg->chunks_cleanup_pending = false;
+    for (size_t i = 0; i < data->nchunks; ++i) {
+        chunk_cleanup_data* cdata = data->chunks + i;
+        component_list* list = reg->components[cdata->comp_id];
+        free(list->chunks[cdata->chunk]);
+        list->chunks[cdata->chunk] = NULL;
+    }
+    destroy_cleanup(data);
+}

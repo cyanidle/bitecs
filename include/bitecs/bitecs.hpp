@@ -150,6 +150,14 @@ struct Registry
             throw std::runtime_error("Could not remove component");
         }
     }
+
+    bitecs_cleanup_data* PrepareCleanup() {
+        return bitecs_cleanup_prepare(reg);
+    }
+
+    void Cleanup(bitecs_cleanup_data* data) {
+        bitecs_cleanup(reg, data);
+    }
 };
 
 

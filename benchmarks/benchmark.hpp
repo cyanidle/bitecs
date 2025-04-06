@@ -103,7 +103,7 @@ static void RunSystems(ECS& ecs)
 template<typename ECS>
 static void PlotArmor(ECS& ecs, typename ECS::Entity protagonist) {
     HealthComponent& health = ecs.template GetComponent<HealthComponent>(protagonist);
-    health.hp = health.maxhp;
+    benchmark::DoNotOptimize(health.hp = health.maxhp);
 }
 
 template<typename ECS>
@@ -119,11 +119,24 @@ static void BM_Systems(benchmark::State& state)
 }
 
 template<typename ECS>
-static void BM_Create_Destroy_Entities(benchmark::State& state)
+static void BM_Create_Destroy(benchmark::State& state)
 {
     for ([[maybe_unused]] auto _: state) {
         ECS ecs;
         CreateEntities(state, ecs);
+    }
+}
+
+template<typename ECS>
+static void BM_Add_Get_Remove(benchmark::State& state)
+{
+    ECS ecs;
+    auto protagonist = CreateProtag(ecs);
+    ecs.template RemoveComponentFrom<PositionComponent>(protagonist);
+    for ([[maybe_unused]] auto _: state) {
+        ecs.template AddComponentTo<PositionComponent>(protagonist, PositionComponent{});
+        benchmark::DoNotOptimize(ecs.template GetComponent<PositionComponent>(protagonist));
+        ecs.template RemoveComponentFrom<PositionComponent>(protagonist);
     }
 }
 
@@ -146,10 +159,12 @@ static void Configurations(benchmark::internal::Benchmark* bench) {
 }
 
 #define ECS_BENCHMARKS_NO_CREATE(ECS) \
-BENCHMARK(BM_Systems<ECS>)->Apply(Configurations); \
-BENCHMARK(BM_Modify_One<ECS>)
+BENCHMARK(BM_Add_Get_Remove<ECS>); \
+BENCHMARK(BM_Modify_One<ECS>); \
+BENCHMARK(BM_Systems<ECS>)->Apply(Configurations)
 
 #define ECS_BENCHMARKS(ECS) \
+BENCHMARK(BM_Add_Get_Remove<ECS>); \
+BENCHMARK(BM_Modify_One<ECS>); \
 BENCHMARK(BM_Systems<ECS>)->Apply(Configurations); \
-BENCHMARK(BM_Create_Destroy_Entities<ECS>)->Apply(Configurations); \
-BENCHMARK(BM_Modify_One<ECS>) \
+BENCHMARK(BM_Create_Destroy<ECS>)->Apply(Configurations)
