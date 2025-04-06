@@ -25,26 +25,16 @@ target_link_libraries(bitecs INTERFACE bitecs-core)
 add_library(bitecs::bitecs ALIAS bitecs)
 add_library(bitecs::core ALIAS bitecs-core)
 
-if (BITECS_TEST)
-    message(STATUS "Building tests")
-    enable_testing()
-
-    find_package(GTest REQUIRED)
-
-    add_executable(bitecs_test tests/test.cpp)
-    target_link_libraries(bitecs_test PRIVATE bitecs GTest::gtest_main)
-    add_test(NAME bitecs_test COMMAND $<TARGET_FILE:bitecs_test>)
-
+if (BITECS_BENCH OR BITECS_TEST AND NOT CONAN_BUILDING)
+    set(CONAN_INSTALL_ARGS --build=missing -o &:bench=True)
+    set(CONAN_INSTALL_ARGS "${CONAN_INSTALL_ARGS}" CACHE STRING "Override default conan opts")
+    include(cmake/conan2.cmake)
 endif()
 
 if (BITECS_BENCH)
-    if (NOT CONAN_BUILDING)
-        set(CONAN_INSTALL_ARGS "--build=missing;-o;bench=True" CACHE STRING "Override default conan opts")
-        include(cmake/conan2.cmake)
-    endif()
     include(cmake/get_cpm.cmake)
 
-    set(MUSTACHE_BUILD_SHARED OFF CACHE BOOL "override")
+    set(MUSTACHE_BUILD_SHARED OFF CACHE BOOL "override" FORCE)
     CPMAddPackage("gh:kirillochnev/mustache#cb18149")
     CPMAddPackage("gh:apples/ginseng@1.1")
 
@@ -72,6 +62,18 @@ if (BITECS_BENCH)
         mustache
     )
     add_test(NAME bitecs_bench COMMAND $<TARGET_FILE:bitecs_bench>)
+endif()
+
+if (BITECS_TEST)
+    message(STATUS "Building tests")
+    enable_testing()
+
+    find_package(GTest REQUIRED)
+
+    add_executable(bitecs_test tests/test.cpp)
+    target_link_libraries(bitecs_test PRIVATE bitecs GTest::gtest_main)
+    add_test(NAME bitecs_test COMMAND $<TARGET_FILE:bitecs_test>)
+
 endif()
 
 if(MSVC)

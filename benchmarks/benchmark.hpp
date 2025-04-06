@@ -107,7 +107,7 @@ static void PlotArmor(ECS& ecs, typename ECS::Entity protagonist) {
 }
 
 template<typename ECS>
-static void BM(benchmark::State& state)
+static void BM_Systems(benchmark::State& state)
 {
     ECS ecs;
     CreateEntities(state, ecs);
@@ -146,10 +146,10 @@ static void Configurations(benchmark::internal::Benchmark* bench) {
 }
 
 #define ECS_BENCHMARKS_NO_CREATE(ECS) \
-BENCHMARK(BM<ECS>)->Apply(Configurations); \
+BENCHMARK(BM_Systems<ECS>)->Apply(Configurations); \
 BENCHMARK(BM_Modify_One<ECS>)
 
 #define ECS_BENCHMARKS(ECS) \
-BENCHMARK(BM<ECS>)->Apply(Configurations); \
+BENCHMARK(BM_Systems<ECS>)->Apply(Configurations); \
 BENCHMARK(BM_Create_Destroy_Entities<ECS>)->Apply(Configurations); \
 BENCHMARK(BM_Modify_One<ECS>) \
