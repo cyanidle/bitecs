@@ -180,7 +180,7 @@ void bitecs_registry_delete(bitecs_registry* reg)
 
 static index_t select_up_to_chunk(component_list* list, index_t begin, index_t count, bitecs_ptrs outBegin)
 {
-    if (!list->meta.typesize) {
+    if (unlikely(!list->meta.typesize)) {
         *outBegin = 0;
         return count;
     }
@@ -213,10 +213,11 @@ bool bitecs_system_step(bitecs_registry *reg, bitecs_SystemStepCtx* ctx)
         bitecs_ptrs begins = ctx->ptrStorage;
         for (int i = 0; i < ctx->ncomps; ++i) {
             int comp = ctx->components[i];
-            index_t selected = select_up_to_chunk(reg->components[comp], begin, count, begins++);
+            component_list* list = reg->components[comp];
+            index_t selected = select_up_to_chunk(list, begin, count, begins++);
             smallestRange = selected < smallestRange ? selected : smallestRange;
         }
-        cb_ctx.beginIndex = begin;
+        cb_ctx.index = begin;
         cb_ctx.entts = (bitecs_EntityProxy*)reg->entities + begin;
         ctx->system(ctx->udata, &cb_ctx, ctx->ptrStorage, smallestRange);
         begin += smallestRange;
@@ -253,7 +254,7 @@ static Entity* deref(bitecs_registry* reg, bitecs_EntityPtr ptr)
 
 static bool reserve_chunks(component_list* list, index_t index, index_t count)
 {
-    if (!list->meta.typesize) return true;
+    if (unlikely(!list->meta.typesize)) return true;
     index_t chunk = (index + count) >> components_shift(list);
     if (list->nchunks <= chunk) {
         index_t newSize = chunk + 1;
@@ -284,7 +285,7 @@ static bool reserve_chunks(component_list* list, index_t index, index_t count)
 static bool component_add_range(component_list* list, index_t index, index_t count, bitecs_ptrs begin, index_t* added)
 {
     if (unlikely(!count)) return false;
-    if (!list->meta.typesize) {
+    if (unlikely(!list->meta.typesize)) {
         *begin = NULL;
         *added = count;
         return true;
@@ -417,7 +418,7 @@ bool bitecs_entt_create(
     }
     index_t cursor = found;
     void** begins = alloca(sizeof(void*) * components->ncomps);
-    bitecs_CallbackContext ctx;
+    bitecs_CallbackContext cb_ctx;
     while (count) {
         index_t smallestRange = count;
         for (int i = 0; i < components->ncomps; ++i) {
@@ -428,9 +429,9 @@ bool bitecs_entt_create(
             if (unlikely(!ok)) return false; // already created leak here?
             smallestRange = added < smallestRange ? added : smallestRange;
         }
-        ctx.entts = (bitecs_EntityProxy*)reg->entities + cursor;
-        ctx.beginIndex = cursor;
-        creator(udata, &ctx, begins, smallestRange);
+        cb_ctx.entts = (bitecs_EntityProxy*)reg->entities + cursor;
+        cb_ctx.index = cursor;
+        creator(udata, &cb_ctx, begins, smallestRange);
         count -= smallestRange;
         cursor += smallestRange;
         reg->entities_count += smallestRange;
@@ -522,16 +523,6 @@ bool bitecs_registry_clone_settings(bitecs_registry *reg, bitecs_registry *out)
     return false;
 }
 
-int bitecs_check_components(bitecs_registry *reg, const bitecs_ComponentsList* components)
-{
-    for (int i = 0; i < components->ncomps; ++i) {
-        if (!reg->components[components->components[i]]) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 bitecs_EntityProxy* bitecs_entt_deref(bitecs_registry *reg, bitecs_EntityPtr ptr)
 {
     return (bitecs_EntityProxy*)deref(reg, ptr);
@@ -575,6 +566,10 @@ static mask_t adjust_for(dict_t diff, mask_t qmask, const dict_t* restrict rankM
     return r0 | r1 | r2 | r3;
 }
 
+static bool needs_adjust(dict_t diff, const Ranks* ranks) {
+    return diff && diff & ranks->highest_select_mask;
+}
+
 static index_t bitecs_query_match(
     bitecs_index_t cursor, const bitecs_QueryContext* ctx,
     const bitecs_Entity* entts, index_t count)
@@ -589,9 +584,8 @@ static index_t bitecs_query_match(
         if ((entt->flags & flags) != flags) continue;
         if ((edict & qdict) != qdict) continue;
         dict_t diff = edict ^ qdict;
-        bool adjust = diff & ranks->highest_select_mask;
         mask_t mask = query->bits;
-        if (adjust) {
+        if (unlikely(needs_adjust(diff, ranks))) {
             mask = adjust_for(diff, query->bits, ranks->select_dict_masks);
         }
         mask_t ecomps = entt->components;
@@ -624,9 +618,8 @@ static bitecs_index_t bitecs_query_miss(
             return cursor;
         }
         dict_t diff = entt->dict ^ current->dict;
-        bool adjust = diff & ranks->highest_select_mask;
         mask_t mask = current->bits;
-        if (unlikely(adjust)) {
+        if (unlikely(needs_adjust(diff, ranks))) {
             mask = adjust_for(diff, current->bits, ranks->select_dict_masks);
             adjusted.bits = mask;
             adjusted.dict = entt->dict;

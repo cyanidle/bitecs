@@ -91,6 +91,11 @@ void deleter_for(void* begin, index_t count) {
     }
 }
 
+template<typename T>
+_BITECS_INLINE inline static T* select(void* batch, index_t i) {
+    return static_cast<T*>(batch) + (std::is_empty_v<T> ? 0 : i);
+}
+
 template<typename, typename, typename...>
 struct system_thunk;
 template<typename Fn, typename...Comps, size_t...Is>
@@ -104,12 +109,12 @@ struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
             if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
                 EntityPtr ptr;
                 ptr.generation = ctx->entts[i].generation;
-                ptr.index = ctx->beginIndex + i;
-                f(ptr, *(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i))...);
+                ptr.index = ctx->index + i;
+                f(ptr, *select<Comps>(outs[Is], i)...);
             } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
-                f(ctx->entts + i, *(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i))...);
+                f(ctx->entts + i, *select<Comps>(outs[Is], i)...);
             } else {
-                f(*(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i))...);
+                f(*select<Comps>(outs[Is], i)...);
             }
         }
     }
@@ -128,12 +133,12 @@ struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
             if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
                 EntityPtr ptr;
                 ptr.generation = ctx->entts[i].generation;
-                ptr.index = ctx->beginIndex + i;
-                f(ptr, (*new(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i)) Comps{})...);
+                ptr.index = ctx->index + i;
+                f(ptr, *(new(select<Comps>(outs[Is], i)) Comps{})...);
             } else if constexpr (std::is_invocable_v<Fn, EntityProxy*, Comps&...>) {
-                f(ctx->entts + i, (*new(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i)) Comps{})...);
+                f(ctx->entts + i, *(new(select<Comps>(outs[Is], i)) Comps{})...);
             } else {
-                f((*new(static_cast<Comps*>(outs[Is]) + (std::is_empty_v<Comps> ? 0 : i)) Comps{})...);
+                f(*(new(select<Comps>(outs[Is], i)) Comps{})...);
             }
         }
     }

@@ -8,9 +8,11 @@
 #include <stdbool.h>
 
 #ifdef __GNUC__
+#define _BITECS_INLINE __attribute((always_inline))
 #define _BITECS_FLATTEN __attribute((flatten))
 #define _BITECS_NODISCARD __attribute__ ((__warn_unused_result__))
 #else
+#define _BITECS_INLINE
 #define _BITECS_FLATTEN
 #define _BITECS_NODISCARD
 #endif
@@ -119,7 +121,7 @@ _BITECS_NODISCARD
 bool bitecs_component_define(bitecs_registry* reg, bitecs_comp_id_t id, bitecs_ComponentMeta meta);
 
 typedef struct {
-    bitecs_index_t beginIndex;
+    bitecs_index_t index;
     bitecs_EntityProxy* entts;
 } bitecs_CallbackContext;
 
@@ -156,14 +158,6 @@ void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bite
 // @warning: do not store this pointer. May be relocated at any time.
 _BITECS_NODISCARD bitecs_EntityProxy* bitecs_entt_deref(bitecs_registry* reg, bitecs_EntityPtr ptr);
 
-void bitecs_system_run(
-    bitecs_registry* reg, bitecs_flags_t flags,
-    const bitecs_ComponentsList* comps,
-    bitecs_Callback system, void* udata);
-
-_BITECS_NODISCARD
-int bitecs_check_components(bitecs_registry* reg, const bitecs_ComponentsList* components);
-
 typedef struct
 {
     bitecs_SparseMask query;
@@ -184,6 +178,11 @@ typedef struct
 
 _BITECS_NODISCARD
 bool bitecs_system_step(bitecs_registry* reg, bitecs_SystemStepCtx* ctx);
+
+void bitecs_system_run(
+    bitecs_registry* reg, bitecs_flags_t flags,
+    const bitecs_ComponentsList* comps,
+    bitecs_Callback system, void* udata);
 
 // idxs must be sorted!
 _BITECS_NODISCARD
