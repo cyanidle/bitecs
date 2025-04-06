@@ -502,7 +502,9 @@ void bitecs_ranks_get(bitecs_Ranks* res, dict_t dict)
         dict >>= trailing + 1;
         rank++;
     }
-    res->highest_select_mask = res->select_dict_masks[res->groups_count - 1];
+    if (res->groups_count) {
+        res->highest_select_mask = res->select_dict_masks[res->groups_count - 1];
+    }
 }
 
 static mask_t relocate_part(dict_t dictDiff, mask_t mask, int index, const dict_t* restrict rankMasks) {
