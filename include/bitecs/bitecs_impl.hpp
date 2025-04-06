@@ -115,20 +115,6 @@ struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
     }
 };
 
-template<typename, typename...>
-struct single_creator;
-template<typename...Comps, size_t...Is>
-struct single_creator<std::index_sequence<Is...>, Comps...> {
-    static void call(bitecs_udata udata, CallbackContext* ctx, bitecs_ptrs outs, index_t)
-    {
-        void** sources = static_cast<void**>(udata);
-        auto* eptr = static_cast<EntityPtr*>(sources[0]);
-        eptr->generation = ctx->entts->generation;
-        eptr->index = ctx->beginIndex;
-        ((new (outs[Is]) Comps(std::move(*static_cast<Comps*>(sources[Is + 1])))), ...);
-    }
-};
-
 template<typename, typename, typename...>
 struct multi_creator;
 template<typename Fn, typename...Comps, size_t...Is>

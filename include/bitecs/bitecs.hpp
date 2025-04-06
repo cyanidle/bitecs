@@ -87,18 +87,6 @@ struct Registry
     void RunSystem(Fn&& f) {
         RunSystem<Comps...>(0, f);
     }
-    template<typename...Comps>
-    EntityPtr Entt(Comps...comps) {
-        static const Components<Comps...> c;
-        EntityPtr res;
-        void* temp[] = {&res, &comps...};
-        using seq = std::index_sequence_for<Comps...>;
-        using creator = impl::single_creator<seq, Comps...>;
-        if (!bitecs_entt_create(reg, 1, &c.list, creator::call, &temp)) {
-            throw std::runtime_error("Could not create entts");
-        }
-        return res;
-    }
     template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
     void Entts(index_t count, Fn& populate) {
         static const Components<Comps...> c;
@@ -114,9 +102,20 @@ struct Registry
     }
     template<typename...Comps>
     void EnttsFromArrays(index_t count, Comps*...init) {
-        return Entts<Comps...>(count, [&](Comps&...out){
+        Entts<Comps...>(count, [&](Comps&...out){
             ((out = std::move(*init++)), ...);
         });
+    }
+
+    template<typename...Comps>
+    EntityPtr Entt(Comps...comps) {
+        static const Components<Comps...> c;
+        EntityPtr res;
+        Entts<Comps...>(1, [&](EntityPtr e, Comps&...cs){
+            res = e;
+            ((cs = std::move(comps)), ...);
+        });
+        return res;
     }
 
     void Destroy(EntityPtr entt) {
