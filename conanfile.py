@@ -51,7 +51,7 @@ class BitECS(ConanFile):
     def build(self):
         cmake = CMake(self)
         cmake.configure(variables={
-            "CONAN_BUILDING=ON"
+            "CONAN_BUILDING": "ON"
         })
         cmake.build()
 

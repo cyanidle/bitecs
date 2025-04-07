@@ -23,6 +23,8 @@ typedef bitecs_Ranks Ranks;
 typedef bitecs_Entity Entity;
 typedef bitecs_SparseMask SparseMask;
 
+const dict_t dead_entt = ~(dict_t)0;
+
 static inline dict_t fill_up_to(int bit) {
     return ((dict_t)(1) << bit) - (dict_t)1;
 }
@@ -468,15 +470,15 @@ static void do_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t c
 
 void bitecs_entt_destroy_batch(bitecs_registry *reg, const bitecs_EntityPtr *ptrs, size_t nptrs)
 {
-    const index_t max = ~(bitecs_index_t)0;
     reg->generation++;
-    bitecs_index_t begin = max;
+    bitecs_index_t begin = 0;
     bitecs_index_t count = 0;
     for (size_t i = 0; i < nptrs; ++i) {
         const bitecs_EntityPtr* ptr = ptrs + i;
         Entity* e = deref(reg, *ptr);
         if (e) {
             e->generation = reg->generation;
+            e->dict = dead_entt;
             if (!count) {
                 begin = ptr->index;
                 continue;
@@ -503,6 +505,7 @@ void bitecs_entt_destroy(bitecs_registry *reg, bitecs_EntityPtr ptr)
     if (unlikely(!e)) return;
     reg->generation++;
     e->generation = reg->generation;
+    e->dict = dead_entt;
     do_destroy_batch(reg, ptr.index, 1);
 }
 
@@ -583,6 +586,7 @@ static index_t bitecs_query_match(
         const Entity* entt = entts + cursor;
         dict_t edict = entt->dict;
         dict_t qdict = query->dict;
+        if (unlikely(entt->dict == dead_entt)) continue;
         if ((entt->flags & flags) != flags) continue;
         if ((edict & qdict) != qdict) continue;
         dict_t diff = edict ^ qdict;
@@ -605,27 +609,28 @@ static bitecs_index_t bitecs_query_miss(
     bitecs_SparseMask adjusted;
     bitecs_flags_t flags = ctx->flags;
     const bitecs_Ranks* ranks = &ctx->ranks;
-    const bitecs_SparseMask* query = &ctx->query;
-    const bitecs_SparseMask* current = query;
+    const bitecs_SparseMask* orig_query = &ctx->query;
+    const bitecs_SparseMask* query = orig_query;
     for (;cursor < count; ++cursor) {
         const Entity* entt = entts + cursor;
     again:
+        if (unlikely(entt->dict == dead_entt)) return cursor;
         if ((entt->flags & flags) != flags) return cursor;
-        if ((entt->dict & current->dict) != current->dict) {
+        if ((entt->dict & query->dict) != query->dict) {
             // missmatch on adjusted query is not definitive!
-            if (current != query) {
-                current = query;
+            if (query != orig_query) {
+                query = orig_query;
                 goto again;
             }
             return cursor;
         }
-        dict_t diff = entt->dict ^ current->dict;
-        mask_t mask = current->bits;
+        dict_t diff = entt->dict ^ query->dict;
+        mask_t mask = query->bits;
         if (unlikely(needs_adjust(diff, ranks))) {
-            mask = adjust_for(diff, current->bits, ranks->select_dict_masks);
+            mask = adjust_for(diff, query->bits, ranks->select_dict_masks);
             adjusted.bits = mask;
             adjusted.dict = entt->dict;
-            current = &adjusted;
+            query = &adjusted;
         }
         if ((entt->components & mask) != mask) {
             return cursor;
