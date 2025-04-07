@@ -94,6 +94,9 @@ void bitecs_registry_delete(bitecs_registry* reg);
 // 3) merge it into main one
 _BITECS_NODISCARD
 bool bitecs_registry_clone_settings(bitecs_registry* reg, bitecs_registry* out);
+
+// from will be consumed (all entities and components moved to reg)
+// (but settings will stay the same)
 _BITECS_NODISCARD
 bool bitecs_registry_merge_other(bitecs_registry* reg, bitecs_registry* from);
 
@@ -115,6 +118,7 @@ typedef struct {
     // frequency: 1-9. How frequent is this component.
     bitecs_Frequency frequency;
     void (*deleter)(void* begin, bitecs_index_t count);
+    void (*relocater)(void* begin, bitecs_index_t count, void* out);
 } bitecs_ComponentMeta;
 
 _BITECS_NODISCARD

@@ -57,21 +57,28 @@ static component_list* components_new(bitecs_ComponentMeta meta) {
     return res;
 }
 
-static void components_destroy(component_list* list)
+static void components_destroy_trivial(component_list* list)
 {
     if (!list) return;
     for (size_t i = 0; i < list->nchunks; ++i) {
         void* chunk = list->chunks[i];
         if (chunk) {
-            if (list->meta.deleter) {
-                list->meta.deleter(chunk, components_in_chunk(list));
-            }
             free(chunk);
         }
     }
-    free(list->nalives);
-    free(list->chunks);
+    if (list->nalives) {
+        free(list->nalives);
+    }
+    if (list->chunks) {
+        free(list->chunks);
+    }
     free(list);
+}
+
+// cal dtor for active
+static void components_destroy(bitecs_registry* reg, component_list* list)
+{
+    assert(false && "Not implemented");
 }
 
 typedef struct FreeList
@@ -170,7 +177,13 @@ void bitecs_registry_delete(bitecs_registry* reg)
         free(reg->entities);
     }
     for (int i = 0; i < BITECS_MAX_COMPONENTS; ++i) {
-        components_destroy(reg->components[i]);
+        component_list* list = reg->components[i];
+        if (!list) continue;
+        if (list->meta.deleter) {
+            components_destroy(reg, list);
+        } else {
+            components_destroy_trivial(list);
+        }
     }
     FreeList* list = reg->freeList;
     while (list) {
@@ -458,6 +471,7 @@ static void do_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t c
             if (list->meta.deleter) {
                 list->meta.deleter(begin, part);
             }
+            // todo: reduce nalives here
             cursor += part;
             cursor_count -= part;
         } while(cursor_count);
@@ -513,9 +527,52 @@ void bitecs_entt_destroy(bitecs_registry *reg, bitecs_EntityPtr ptr)
 
 bool bitecs_registry_merge_other(bitecs_registry *reg, bitecs_registry *from)
 {
-    if (unlikely(!reserve_entts(reg, reg->entities_count + from->entities_count))) return false;
-    // migrate all components to index + reg->count;
-    // reg->entities_count += from->entities_count;
+    index_t was = reg->entities_count;
+    index_t append = from->entities_count;
+    if (unlikely(!reserve_entts(reg, was + append))) {
+        return false;
+    }
+    memcpy(reg->entities + was, from->entities, sizeof(Entity) * append);
+    for (int comp = 0; comp < BITECS_MAX_COMPONENTS; ++comp) {
+        component_list* src = from->components[comp];
+        if (!src) continue;
+        if (!reserve_chunks(src, was, append)) {
+            return false;
+        }
+    }
+    from->chunks_cleanup_pending = true;
+    for (int comp = 0; comp < BITECS_MAX_COMPONENTS; ++comp) {
+        component_list* src = from->components[comp];
+        component_list* dest = reg->components[comp];
+        assert((bool)src == (bool)dest && "Merging missmatching registry");
+        if (!src) continue;
+        index_t cursor = was;
+        index_t count = append;
+        while (count) {
+            void* fromPtr;
+            void* intoPtr;
+            index_t selected = select_up_to_chunk(src, cursor, count, &fromPtr);
+            index_t selectedDest = select_up_to_chunk(dest, cursor, count, &intoPtr);
+            (void)selectedDest;
+            assert(selected == selectedDest);
+            if (src->meta.typesize) {
+                if (src->meta.relocater) {
+                    src->meta.relocater(fromPtr, selected, intoPtr);
+                } else {
+                    memcpy(intoPtr, fromPtr, selected * src->meta.typesize);
+                }
+            }
+            cursor += selected;
+            count -= selected;
+        }
+        index_t wasLastChunk = was >> components_shift(dest);
+        for (size_t i = 0; i < src->nchunks; ++i) {
+            dest->nalives[wasLastChunk + i] = src->nalives[i];
+            src->nalives[i] = 0;
+        }
+    }
+    reg->entities_count += from->entities_count;
+    from->entities_count = 0;
     assert(false && "Not implemented");
     return false;
 }

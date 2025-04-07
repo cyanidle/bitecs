@@ -84,12 +84,22 @@ constexpr std::array<int, sizeof...(Comps)> prepare_comps()
 }
 
 template<typename T>
-_BITECS_FLATTEN
-void deleter_for(void* begin, index_t count) {
+_BITECS_FLATTEN void deleter_for(void* begin, index_t count) {
     for (index_t i = 0; i < count; ++i) {
         static_cast<T*>(begin)[i].~T();
     }
 }
+
+template<typename T>
+_BITECS_FLATTEN void relocater_for(void* begin, index_t count, void* out) {
+    for (index_t i = 0; i < count; ++i) {
+        T* dest = static_cast<T*>(out) + i;
+        T* source = static_cast<T*>(begin) + i;
+        new (dest) T{std::move(*source)};
+        source->~T();
+    }
+}
+
 
 template<typename T>
 _BITECS_INLINE inline static T* select(void* batch, index_t i) {
