@@ -29,10 +29,18 @@ static inline dict_t fill_up_to(int bit) {
     return ((dict_t)(1) << bit) - (dict_t)1;
 }
 
+typedef struct
+{
+    struct _chunk_header {
+        index_t nalives;
+    } header;
+    char _pad[BITECS_COMPONENTS_CHUNK_ALIGN - sizeof(struct _chunk_header)];
+    char storage[];
+} Chunk;
+
 typedef struct component_list
 {
-    index_t* nalives;
-    void** chunks;
+    Chunk** chunks;
     size_t nchunks;
     bitecs_ComponentMeta meta;
 } component_list;
@@ -46,7 +54,7 @@ static size_t components_in_chunk(component_list* list) {
 }
 
 static size_t chunk_sizeof(component_list* list) {
-    return components_in_chunk(list) * list->meta.typesize;
+    return components_in_chunk(list) * list->meta.typesize + sizeof(Chunk);
 }
 
 static component_list* components_new(bitecs_ComponentMeta meta) {
@@ -61,13 +69,10 @@ static void components_destroy_trivial(component_list* list)
 {
     if (!list) return;
     for (size_t i = 0; i < list->nchunks; ++i) {
-        void* chunk = list->chunks[i];
+        Chunk* chunk = list->chunks[i];
         if (chunk) {
             free(chunk);
         }
-    }
-    if (list->nalives) {
-        free(list->nalives);
     }
     if (list->chunks) {
         free(list->chunks);
@@ -203,7 +208,7 @@ static index_t select_up_to_chunk(component_list* list, index_t begin, index_t c
     }
     index_t chunk = begin >> components_shift(list);
     index_t i = begin & fill_up_to(components_shift(list));
-    char* chunkBegin = list->chunks[chunk];
+    char* chunkBegin = list->chunks[chunk]->storage;
     assert(chunkBegin && "Attempt to select from NULL chunk (mask of component lies?)");
     *outBegin = chunkBegin + i * list->meta.typesize;
     index_t chunkTail = components_in_chunk(list) - i;
@@ -272,28 +277,18 @@ static Entity* deref(bitecs_registry* reg, bitecs_EntityPtr ptr)
 static bool reserve_chunks(component_list* list, index_t index, index_t count)
 {
     if (unlikely(!list->meta.typesize)) return true;
-    index_t chunk = (index + count) >> components_shift(list);
+    index_t maxIndex = index + count;
+    index_t chunk = maxIndex >> components_shift(list);
     if (list->nchunks <= chunk) {
         index_t newSize = chunk + 1;
-        void** newChunks = malloc(sizeof(void*) * newSize);
+        Chunk** newChunks = malloc(sizeof(Chunk*) * newSize);
         if (!newChunks) return false;
-        index_t* newAlives = malloc(sizeof(index_t) * newSize);
-        if (!newAlives) {
-            free(newChunks);
-            return false;
-        }
         if (list->chunks) {
-            memcpy(newChunks, list->chunks, sizeof(void*) * list->nchunks);
+            memcpy(newChunks, list->chunks, sizeof(Chunk*) * list->nchunks);
             free(list->chunks);
         }
-        memset(newChunks + list->nchunks, 0, sizeof(void*) * (newSize - list->nchunks));
-        if (list->nalives) {
-            memcpy(newAlives, list->nalives, sizeof(index_t) * list->nchunks);
-            free(list->nalives);
-        }
-        memset(newAlives + list->nchunks, 0, sizeof(index_t) * (newSize - list->nchunks));
+        memset(newChunks + list->nchunks, 0, sizeof(Chunk*) * (newSize - list->nchunks));
         list->chunks = newChunks;
-        list->nalives = newAlives;
         list->nchunks = newSize;
     }
     return true;
@@ -311,16 +306,19 @@ static bool component_add_range(component_list* list, index_t index, index_t cou
     index_t i = index & fill_up_to(components_shift(list));
     index_t diff = components_in_chunk(list) - i;
     diff = diff > count ? count : diff;
-    if (unlikely(!list->chunks[chunk])) {
-        list->chunks[chunk] = aligned_alloc(BITECS_COMPONENTS_CHUNK_ALIGN, chunk_sizeof(list));
-        if (unlikely(!list->chunks[chunk])) {
+    Chunk* owner = list->chunks[chunk];
+    if (unlikely(!owner)) {
+        owner = aligned_alloc(BITECS_COMPONENTS_CHUNK_ALIGN, chunk_sizeof(list));
+        memset(owner, 0, sizeof(Chunk));
+        if (unlikely(!owner)) {
             *begin = NULL;
             *added = 0;
             return false;
         }
     }
-    list->nalives[chunk] += diff;
-    *begin = (char*)list->chunks[chunk] + i * list->meta.typesize;
+    list->chunks[chunk] = owner;
+    owner->header.nalives += diff;
+    *begin = owner->storage + i * list->meta.typesize;
     *added = diff;
     return true;
 }
@@ -354,7 +352,8 @@ static void* deref_comp(component_list* list, index_t index)
 {
     index_t chunk = index >> components_shift(list);
     index_t i = index & fill_up_to(components_shift(list));
-    return (char*)list->chunks[chunk] + list->meta.typesize * i;
+    Chunk* owner = list->chunks[chunk];
+    return owner->storage + list->meta.typesize * i;
 }
 
 void *bitecs_entt_get_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bitecs_comp_id_t id)
@@ -371,11 +370,12 @@ bool bitecs_entt_remove_component(bitecs_registry *reg, bitecs_EntityPtr ptr, bi
     component_list* list = reg->components[id];
     index_t chunk = ptr.index >> components_shift(list);
     index_t i = ptr.index & fill_up_to(components_shift(list));
-    void* comp = (char*)list->chunks[chunk] + i * list->meta.typesize;
+    Chunk* owner = list->chunks[chunk];
+    void* comp = owner->storage + i * list->meta.typesize;
     if (list->meta.deleter) {
         list->meta.deleter(comp, 1);
     }
-    if (list->nalives[chunk]-- == 1) {
+    if (owner->header.nalives-- == 1) {
         atomic_store_explicit(&reg->chunks_cleanup_pending, true, memory_order_relaxed);
     }
     return bitecs_mask_set((SparseMask*)e, id, false);
@@ -537,7 +537,8 @@ bool bitecs_registry_merge_other(bitecs_registry *reg, bitecs_registry *from)
         component_list* src = from->components[comp];
         if (src) {
             component_list* dest = reg->components[comp];
-            if (!reserve_chunks(dest, was, append)) {
+            bool ok = reserve_chunks(dest, was, append);
+            if (unlikely(!ok)) {
                 return false;
             }
         }
@@ -548,14 +549,15 @@ bool bitecs_registry_merge_other(bitecs_registry *reg, bitecs_registry *from)
         component_list* dest = reg->components[comp];
         assert((bool)src == (bool)dest && "Merging missmatching registry");
         if (!src) continue;
-        index_t cursor = was;
+        index_t inputCursor = 0;
+        index_t outputCursor = was;
         index_t count = append;
         while (count) {
             void* fromPtr;
             void* intoPtr;
-            index_t selected = select_up_to_chunk(src, cursor, count, &fromPtr);
+            index_t selected = select_up_to_chunk(src, inputCursor, count, &fromPtr);
             index_t selectedDest;
-            bool ok = component_add_range(dest, cursor, count, &intoPtr, &selectedDest);
+            bool ok = component_add_range(dest, outputCursor, count, &intoPtr, &selectedDest);
             if (unlikely(!ok)) {
                 return false; //oom
             }
@@ -567,13 +569,9 @@ bool bitecs_registry_merge_other(bitecs_registry *reg, bitecs_registry *from)
                     memcpy(intoPtr, fromPtr, selected * src->meta.typesize);
                 }
             }
-            cursor += selected;
+            inputCursor += selected;
+            outputCursor += selected;
             count -= selected;
-        }
-        index_t wasLastChunk = was >> components_shift(dest);
-        for (size_t i = 0; i < src->nchunks; ++i) {
-            dest->nalives[wasLastChunk + i] += src->nalives[i];
-            src->nalives[i] = 0;
         }
     }
     reg->entities_count += from->entities_count;
@@ -846,7 +844,8 @@ bitecs_cleanup_data *bitecs_cleanup_prepare(bitecs_registry *reg)
             component_list* list = reg->components[comp];
             if (!list) continue;
             for (size_t ch = 0; ch < list->nchunks; ++ch) {
-                if (!list->nalives[ch] && list->chunks[ch]) {
+                Chunk* current = list->chunks[ch];
+                if (current && !current->header.nalives) {
                     chunk_cleanup_data cd;
                     cd.comp_id = comp;
                     cd.chunk = ch;

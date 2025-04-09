@@ -169,8 +169,8 @@ TEST(Merge, Basic)
     int total = 0;
     for (int i: counts) {
         for (int k = 0; k < i; ++k) {
-            reg2.Entt(Component1{}, Component2{});
-            reg2.Entt(Component3{}, Component1{});
+            reg2.Entt(Component1{k}, Component2{});
+            reg2.Entt(Component3{}, Component1{k});
         }
         int appended = i * 2;
 
