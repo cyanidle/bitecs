@@ -204,7 +204,7 @@ static index_t select_up_to_chunk(component_list* list, index_t begin, index_t c
     index_t chunk = begin >> components_shift(list);
     index_t i = begin & fill_up_to(components_shift(list));
     char* chunkBegin = list->chunks[chunk];
-    assert(chunkBegin && "Entity mask says component exists. It does not");
+    assert(chunkBegin && "Attempt to select from NULL chunk (mask of component lies?)");
     *outBegin = chunkBegin + i * list->meta.typesize;
     index_t chunkTail = components_in_chunk(list) - i;
     return count > chunkTail ? chunkTail : count;
@@ -535,9 +535,11 @@ bool bitecs_registry_merge_other(bitecs_registry *reg, bitecs_registry *from)
     memcpy(reg->entities + was, from->entities, sizeof(Entity) * append);
     for (int comp = 0; comp < BITECS_MAX_COMPONENTS; ++comp) {
         component_list* src = from->components[comp];
-        if (!src) continue;
-        if (!reserve_chunks(src, was, append)) {
-            return false;
+        if (src) {
+            component_list* dest = reg->components[comp];
+            if (!reserve_chunks(dest, was, append)) {
+                return false;
+            }
         }
     }
     from->chunks_cleanup_pending = true;
@@ -552,9 +554,12 @@ bool bitecs_registry_merge_other(bitecs_registry *reg, bitecs_registry *from)
             void* fromPtr;
             void* intoPtr;
             index_t selected = select_up_to_chunk(src, cursor, count, &fromPtr);
-            index_t selectedDest = select_up_to_chunk(dest, cursor, count, &intoPtr);
-            (void)selectedDest;
-            assert(selected == selectedDest);
+            index_t selectedDest;
+            bool ok = component_add_range(dest, cursor, count, &intoPtr, &selectedDest);
+            if (unlikely(!ok)) {
+                return false; //oom
+            }
+            selected = selected < selectedDest ? selected : selectedDest;
             if (src->meta.typesize) {
                 if (src->meta.relocater) {
                     src->meta.relocater(fromPtr, selected, intoPtr);
@@ -567,14 +572,13 @@ bool bitecs_registry_merge_other(bitecs_registry *reg, bitecs_registry *from)
         }
         index_t wasLastChunk = was >> components_shift(dest);
         for (size_t i = 0; i < src->nchunks; ++i) {
-            dest->nalives[wasLastChunk + i] = src->nalives[i];
+            dest->nalives[wasLastChunk + i] += src->nalives[i];
             src->nalives[i] = 0;
         }
     }
     reg->entities_count += from->entities_count;
     from->entities_count = 0;
-    assert(false && "Not implemented");
-    return false;
+    return true;
 }
 
 bool bitecs_registry_clone_settings(bitecs_registry *reg, bitecs_registry *out)

@@ -155,6 +155,49 @@ TEST(Cleanup, Basic)
     reg.Cleanup(data2);
 }
 
+TEST(Merge, Basic)
+{
+    Registry reg;
+    reg.DefineComponent<Component1>(bitecs_freq3);
+    reg.DefineComponent<Component2>(bitecs_freq5);
+    reg.DefineComponent<Component3>(bitecs_freq2);
+    Registry reg2;
+    reg2.DefineComponent<Component1>(bitecs_freq3);
+    reg2.DefineComponent<Component2>(bitecs_freq5);
+    reg2.DefineComponent<Component3>(bitecs_freq2);
+
+    int total = 0;
+    for (int i: counts) {
+        for (int k = 0; k < i; ++k) {
+            reg2.Entt(Component1{}, Component2{});
+            reg2.Entt(Component3{}, Component1{});
+        }
+        int appended = i * 2;
+
+        int count = 0;
+        reg2.RunSystem([&](Component1& c1){
+            count++;
+        });
+
+        CHECK(count == appended);
+
+        reg.MergeFrom(reg2);
+        total += appended;
+
+        count = 0;
+        reg2.RunSystem([&](Component1& c1){
+            count++;
+        });
+        CHECK(count == 0);
+
+        count = 0;
+        reg.RunSystem([&](Component1& c1){
+            count++;
+        });
+        CHECK(count == total);
+    }
+}
+
 TEST(Mask, Ranks)
 {
     bitecs_Ranks ranks;

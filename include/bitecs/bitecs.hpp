@@ -191,6 +191,12 @@ public:
     void Cleanup(bitecs_cleanup_data* data) {
         bitecs_cleanup(reg, data);
     }
+
+    void MergeFrom(Registry& reg) {
+        if (!bitecs_registry_merge_other(this->reg, reg.reg)) {
+            throw std::runtime_error("Could not merge other registry");
+        }
+    }
 };
 
 
