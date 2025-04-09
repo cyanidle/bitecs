@@ -82,6 +82,11 @@ TEST(Entts, MultiCreate) {
         });
         CHECK(iter == count + prev_counts);
         iter = 0;
+        reg.RunSystem([&](Component1& c1, Component2& c2){
+            iter++;
+        });
+        CHECK(iter == count + prev_counts);
+        iter = 0;
         reg.RunSystem<Component1>([&](Component1& c1){
             iter++;
         });
@@ -117,6 +122,37 @@ TEST(Entts, FromArray) {
         CHECK(iter == count + prev_counts);
         prev_counts += count;
     }
+}
+
+TEST(Destroy, Basic)
+{
+    Registry reg;
+    reg.DefineComponent<Component1>(bitecs_freq3);
+    reg.DefineComponent<Component2>(bitecs_freq5);
+    reg.Entt(Component2{});
+    auto e = reg.Entt(Component1{}, Component2{});
+    reg.Entt(Component2{});
+    CHECK(reg.Deref(e));
+    reg.Destroy(e);
+    CHECK(reg.Deref(e) == nullptr);
+    auto e2 = reg.Entt(Component1{}, Component2{});
+    CHECK(reg.Deref(e) == nullptr);
+    CHECK(reg.Deref(e2));
+    CHECK(e.index == e2.index);
+    CHECK(e.generation != e2.generation);
+}
+
+TEST(Cleanup, Basic)
+{
+    Registry reg;
+    reg.DefineComponent<Component1>(bitecs_freq3);
+    reg.DefineComponent<Component2>(bitecs_freq5);
+    auto e = reg.Entt(Component1{}, Component2{});
+    auto data = reg.PrepareCleanup();
+    reg.Cleanup(data);
+    reg.RemoveComponent<Component1>(e);
+    auto data2 = reg.PrepareCleanup();
+    reg.Cleanup(data2);
 }
 
 TEST(Mask, Ranks)

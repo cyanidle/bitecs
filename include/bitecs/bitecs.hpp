@@ -42,17 +42,29 @@ public:
     }
 };
 
-template<typename Fn, typename...Comps>
-using if_compatible_callback = std::enable_if_t<
-    std::is_invocable_v<Fn, Comps&...>
-    || std::is_invocable_v<Fn, EntityPtr, Comps&...>
-    || std::is_invocable_v<Fn, EntityProxy*, Comps&...>
-    >;
-
-struct Registry
+class Registry
 {
     bitecs_registry* reg;
 
+    template<typename...Comps, typename Fn>
+    void DoEntts(index_t count, Fn& populate, TypeList<Comps...> = {})
+    {
+        static const Components<Comps...> c;
+        using seq = std::index_sequence_for<Comps...>;
+        using creator = impl::multi_creator<Fn, seq, Comps...>;
+        if (!bitecs_entt_create(reg, count, &c.list, creator::call, reinterpret_cast<void*>(&populate))) {
+            throw std::runtime_error("Could not create entts");
+        }
+    }
+
+    template<typename...Comps, typename Fn>
+    void DoRunSystem(bitecs_flags_t flags, Fn& f, TypeList<Comps...> = {}) {
+        static const Components<Comps...> comps;
+        constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<Comps...>, Comps...>::call;
+        bitecs_system_run(reg, flags, &comps.list, system, reinterpret_cast<void*>(&f));
+    }
+
+public:
     Registry(Registry const&) = delete;
     Registry(Registry&& o) : reg(std::exchange(o.reg, nullptr)) {}
 
@@ -61,6 +73,10 @@ struct Registry
     }
     ~Registry() {
         bitecs_registry_delete(reg);
+    }
+
+    EntityProxy* Deref(EntityPtr ptr) {
+        return bitecs_entt_deref(reg, ptr);
     }
 
     template<typename T>
@@ -74,32 +90,46 @@ struct Registry
         }
         return bitecs_component_define(reg, component_id<T>, meta);
     }
-    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+
+    template<typename...Comps, typename Fn>
     void RunSystem(bitecs_flags_t flags, Fn& f) {
-        static const Components<Comps...> comps;
-        constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<Comps...>, Comps...>::call;
-        bitecs_system_run(reg, flags, &comps.list, system, reinterpret_cast<void*>(&f));
+        if constexpr (sizeof...(Comps) == 0) {
+            using args = impl::deduce_args_t<Fn>;
+            if constexpr (!std::is_void_v<args>) {
+                DoRunSystem(flags, f, args{});
+            } else {
+                DoRunSystem<Comps...>(flags, f);
+            }
+        } else {
+            DoRunSystem<Comps...>(flags, f);
+        }
     }
 
-    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    template<typename...Comps, typename Fn>
     void RunSystem(bitecs_flags_t flags, Fn&& f) {
         RunSystem<Comps...>(flags, f);
     }
 
-    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    template<typename...Comps, typename Fn>
     void RunSystem(Fn&& f) {
         RunSystem<Comps...>(0, f);
     }
-    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
-    void Entts(index_t count, Fn& populate) {
-        static const Components<Comps...> c;
-        using seq = std::index_sequence_for<Comps...>;
-        using creator = impl::multi_creator<Fn, seq, Comps...>;
-        if (!bitecs_entt_create(reg, count, &c.list, creator::call, reinterpret_cast<void*>(&populate))) {
-            throw std::runtime_error("Could not create entts");
+
+    template<typename...Comps, typename Fn>
+    void Entts(index_t count, Fn& populate)
+    {
+        if constexpr (sizeof...(Comps) == 0) {
+            using args = impl::deduce_args_t<Fn>;
+            if constexpr (!std::is_void_v<args>) {
+                DoEntts(count, populate, args{});
+            } else {
+                DoEntts<Comps...>(count, populate);
+            }
+        } else {
+            DoEntts<Comps...>(count, populate);
         }
     }
-    template<typename...Comps, typename Fn, typename = if_compatible_callback<Fn, Comps...>>
+    template<typename...Comps, typename Fn>
     void Entts(index_t count, Fn&& populate) {
         Entts<Comps...>(count, populate);
     }

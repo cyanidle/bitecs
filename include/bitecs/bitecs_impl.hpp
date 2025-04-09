@@ -22,6 +22,12 @@ using EntityProxy = bitecs_EntityProxy;
 using EntityPtr = bitecs_EntityPtr;
 using CallbackContext = bitecs_CallbackContext;
 
+template<typename...T>
+struct TypeList {};
+
+template<typename T>
+struct Tag {};
+
 template<typename T>
 struct component_info {
     static constexpr int id = T::bitecs_id;
@@ -154,4 +160,34 @@ struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
     }
 };
 
-}
+template<typename T>
+auto remove_cvref(Tag<T>) -> T;
+
+template<typename T>
+auto remove_cvref(Tag<const T>) -> T;
+
+template<typename T>
+auto remove_cvref(Tag<T&>) -> decltype(impl::remove_cvref(Tag<T>{}));
+
+auto deduce_args(...) -> void;
+
+template<typename...Args>
+using clean_args = TypeList<decltype(impl::remove_cvref(Tag<Args>{}))...>;
+
+template<typename Ret, typename...Args>
+auto deduce_args(Ret(*)(Args...)) -> clean_args<Args...>;
+
+template<typename Ret, typename C, typename...Args>
+auto deduce_args(Ret(C::*)(Args...)) -> clean_args<Args...>;
+
+template<typename Ret, typename C, typename...Args>
+auto deduce_args(Ret(C::*)(Args...) const) -> clean_args<Args...>;
+
+template<typename Fn, typename = decltype(&Fn::operator())>
+auto deduce_args(Fn) -> decltype(impl::deduce_args(&Fn::operator()));
+
+template<typename Fn>
+using deduce_args_t = decltype(impl::deduce_args(std::declval<Fn>()));
+
+
+} //bitecs::impl

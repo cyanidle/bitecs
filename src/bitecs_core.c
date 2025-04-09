@@ -840,8 +840,9 @@ bitecs_cleanup_data *bitecs_cleanup_prepare(bitecs_registry *reg)
     if (reg->chunks_cleanup_pending) {
         for (int comp = 0; comp < BITECS_MAX_COMPONENTS; ++comp) {
             component_list* list = reg->components[comp];
+            if (!list) continue;
             for (size_t ch = 0; ch < list->nchunks; ++ch) {
-                if (!list->chunks[ch]) {
+                if (!list->nalives[ch] && list->chunks[ch]) {
                     chunk_cleanup_data cd;
                     cd.comp_id = comp;
                     cd.chunk = ch;
