@@ -47,16 +47,16 @@ typedef struct
 
 typedef struct
 {
-    bitecs_mask_t bits;
     bitecs_dict_t dict;
+    bitecs_mask_t bits;
 } bitecs_SparseMask;
 
 typedef struct
 {
-    // 4 groups of 32 bits. 4-128 active on single entt at the same time
-    bitecs_mask_t components;
     // which groups of 32 bits are active out of 64 total (max components registered: 2048)
     bitecs_dict_t dict;
+    // 4 groups of 32 bits. 4-128 active on single entt at the same time
+    bitecs_mask_t components;
     // generation make all EntityPtr weak references (check if this actually is still alive entt)
     bitecs_generation_t generation;
     // user-defined flags
@@ -65,8 +65,8 @@ typedef struct
 
 typedef struct
 {
-    const bitecs_mask_t components;
     const bitecs_dict_t dict;
+    const bitecs_mask_t components;
     const bitecs_generation_t generation;
     bitecs_flags_t flags;
 } bitecs_EntityProxy;
