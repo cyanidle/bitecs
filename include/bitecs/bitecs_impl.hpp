@@ -73,7 +73,7 @@ constexpr int count_groups(const int* comps, int ncomps) {
 }
 
 template<typename...Comps>
-constexpr std::array<int, sizeof...(Comps)> prepare_comps()
+constexpr std::array<int, sizeof...(Comps)> sorted_ids()
 {
     std::array<int, sizeof...(Comps)> res = {component_id<Comps>...};
     for (int i = 0; i < res.size(); ++i) {

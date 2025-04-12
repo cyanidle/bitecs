@@ -30,16 +30,14 @@ template<typename...Comps>
 class Components
 {
     static_assert(impl::no_duplicates<Comps...>());
-    static constexpr auto _data = impl::prepare_comps<Comps...>();
-    static_assert(impl::count_groups(_data.data(), _data.size()) <= BITECS_GROUPS_COUNT);
-    static constexpr int _original[] = {component_id<Comps>...};
+    static constexpr int data[] = {component_id<Comps>...};
+    static constexpr auto sorted = impl::sorted_ids<Comps...>();
+    static constexpr int size = sizeof...(Comps);
+    static_assert(impl::count_groups(data, size) <= BITECS_GROUPS_COUNT);
 public:
-    bitecs_ComponentsList list;
-    Components() {
-        list.mask = SparseMask(_data.data(), _data.size()).mask;
-        list.components = _original;
-        list.ncomps = _data.size();
-    }
+    static inline bitecs_ComponentsList list = {
+        SparseMask(sorted.data(), size).mask, data, size
+    };
 };
 
 class Registry

@@ -785,11 +785,21 @@ bool bitecs_mask_get(const bitecs_SparseMask* mask, int index)
 _BITECS_FLATTEN
 bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count)
 {
+#ifndef NDEBUG
+    {
+        int _last = 0;
+        for (int i = 0; i < idxs_count; ++i) {
+            assert(idxs[i] >= 0 && "bitecs_mask_from_array(): Invalid input");
+            assert(idxs[i] < BITECS_MAX_COMPONENTS);
+            assert(_last <= idxs[i] && "bitecs_mask_from_array(): Unsorted input");
+            _last = idxs[i];
+        }
+    }
+#endif
     maskOut->dict = 0;
     maskOut->bits = 0;
     for (int i = 0; i < idxs_count; ++i) {
         int idx = idxs[i];
-        assert(idx < BITECS_MAX_COMPONENTS);
         int group = idx >> BITECS_GROUP_SHIFT;
         if (unlikely(group > BITECS_BITS_IN_DICT)) {
             return false;
