@@ -47,20 +47,19 @@ class Registry
     template<typename...Comps, typename Fn>
     void DoEntts(index_t count, Fn& populate, TypeList<Comps...> = {})
     {
-        static const Components<Comps...> comps;
         using seq = std::index_sequence_for<Comps...>;
         using creator = impl::multi_creator<Fn, seq, Comps...>;
-        if (!bitecs_entt_create(reg, count, &comps.list, creator::call, reinterpret_cast<void*>(&populate))) {
+        if (!bitecs_entt_create(reg, count, &Components<Comps...>::list, creator::call, reinterpret_cast<void*>(&populate))) {
             throw std::runtime_error("Could not create entts");
         }
     }
 
     template<typename...Comps, typename Fn>
     void DoRunSystem(bitecs_flags_t flags, Fn& f, TypeList<Comps...> = {}) {
-        static const Components<Comps...> comps;
-        constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<Comps...>, Comps...>::call;
+        using seq = std::index_sequence_for<Comps...>;
+        constexpr auto* system = impl::system_thunk<Fn, seq, Comps...>::call;
         bitecs_SystemParams params = {};
-        params.comps = &comps.list;
+        params.comps = &Components<Comps...>::list;
         params.system = system;
         params.flags = flags;
         params.udata = reinterpret_cast<void*>(&f);
