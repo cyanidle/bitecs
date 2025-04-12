@@ -25,16 +25,14 @@ extern "C" {
 #define BITECS_INDEX_T uint32_t
 #endif
 
-#define BITECS_GROUP_SIZE 32
-#define BITECS_GROUP_SHIFT 5
+#define BITECS_GROUP_SIZE 16
+#define BITECS_GROUP_SHIFT 4
 #define BITECS_GROUPS_COUNT 4
 #define BITECS_FREQUENCY_ADJUST 5
 #define BITECS_BITS_IN_DICT 64
 #define BITECS_MAX_COMPONENTS (BITECS_GROUP_SIZE * BITECS_BITS_IN_DICT)
-#define BITECS_COMPONENTS_CHUNK_ALIGN 16
 
-
-typedef __uint128_t bitecs_mask_t;
+typedef uint64_t bitecs_mask_t;
 typedef uint64_t bitecs_dict_t;
 typedef BITECS_INDEX_T bitecs_index_t;
 typedef uint32_t bitecs_generation_t;
@@ -162,31 +160,23 @@ void* bitecs_entt_get_component(bitecs_registry* reg, bitecs_EntityPtr ptr, bite
 // @warning: do not store this pointer. May be relocated at any time.
 _BITECS_NODISCARD bitecs_EntityProxy* bitecs_entt_deref(bitecs_registry* reg, bitecs_EntityPtr ptr);
 
-typedef struct
-{
-    bitecs_SparseMask query;
-    bitecs_Ranks ranks;
+typedef struct {
     bitecs_flags_t flags;
-} bitecs_QueryContext;
-
-typedef struct
-{
-    bitecs_ptrs ptrStorage; //should have space for void*[ncomps]
-    const int* components;
-    int ncomps;
+    const bitecs_ComponentsList* comps;
     bitecs_Callback system;
     void* udata;
-    bitecs_QueryContext queryContext;
-    bitecs_index_t cursor;
-} bitecs_SystemStepCtx;
+} bitecs_system_params;
 
-_BITECS_NODISCARD
-bool bitecs_system_step(bitecs_registry* reg, bitecs_SystemStepCtx* ctx);
+typedef struct bitecs_threadpool bitecs_threadpool;
 
-void bitecs_system_run(
-    bitecs_registry* reg, bitecs_flags_t flags,
-    const bitecs_ComponentsList* comps,
-    bitecs_Callback system, void* udata);
+void bitecs_system_run(bitecs_registry* reg, bitecs_system_params* params);
+
+typedef struct {
+    bitecs_system_params* params;
+    size_t nsystems;
+} bitecs_multi_system_params;
+
+void bitecs_system_run_many(bitecs_registry* registry, bitecs_threadpool* tpool, bitecs_multi_system_params* systems);
 
 // idxs must be sorted!
 _BITECS_NODISCARD
@@ -208,6 +198,11 @@ typedef struct bitecs_cleanup_data bitecs_cleanup_data;
 // Deferred cleanup API:
 _BITECS_NODISCARD bitecs_cleanup_data* bitecs_cleanup_prepare(bitecs_registry* reg);
 void bitecs_cleanup(bitecs_registry* reg, bitecs_cleanup_data* data);
+
+
+bitecs_threadpool* bitecs_threadpool_new(size_t nthreads);
+void bitecs_threadpool_delete(bitecs_threadpool* tpool);
+
 
 #ifdef __cplusplus
 }

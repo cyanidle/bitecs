@@ -70,7 +70,9 @@ if (BITECS_TEST)
 
     find_package(GTest REQUIRED)
 
-    add_executable(bitecs_test tests/test.cpp)
+    add_executable(bitecs_test
+        tests/test_mask.cpp
+        tests/test_registry.cpp)
     target_link_libraries(bitecs_test PRIVATE bitecs GTest::gtest_main)
     add_test(NAME bitecs_test COMMAND $<TARGET_FILE:bitecs_test>)
 
