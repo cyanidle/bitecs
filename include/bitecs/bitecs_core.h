@@ -165,32 +165,27 @@ typedef struct {
     const bitecs_ComponentsList* comps;
     bitecs_Callback system;
     void* udata;
-} bitecs_system_params;
+} bitecs_SystemParams;
 
 typedef struct bitecs_threadpool bitecs_threadpool;
 
-void bitecs_system_run(bitecs_registry* reg, bitecs_system_params* params);
+void bitecs_system_run(bitecs_registry* reg, bitecs_SystemParams* params);
 
 typedef struct {
-    bitecs_system_params* params;
+    bitecs_SystemParams* params;
     size_t nsystems;
-} bitecs_multi_system_params;
+} bitecs_MultiSystemParams;
 
-void bitecs_system_run_many(bitecs_registry* registry, bitecs_threadpool* tpool, bitecs_multi_system_params* systems);
+void bitecs_system_run_many(bitecs_registry* registry, bitecs_threadpool* tpool, bitecs_MultiSystemParams* systems);
 
-// idxs must be sorted!
-_BITECS_NODISCARD
-bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count);
-_BITECS_NODISCARD
-bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state);
-_BITECS_NODISCARD
-bool bitecs_mask_get(const bitecs_SparseMask* mask, int index);
+_BITECS_NODISCARD bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count);
+_BITECS_NODISCARD bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state);
+_BITECS_NODISCARD bool bitecs_mask_get(const bitecs_SparseMask* mask, int index);
 
 typedef int bitecs_BitsStorage[128];
 // returns N bits, that got written to storage*
 _BITECS_NODISCARD
-int bitecs_mask_into_array(
-    const bitecs_SparseMask* mask, const bitecs_Ranks* ranks, bitecs_BitsStorage* storage);
+int bitecs_mask_into_array(const bitecs_SparseMask* mask, const bitecs_Ranks* ranks, int* storage);
 
 
 typedef struct bitecs_cleanup_data bitecs_cleanup_data;

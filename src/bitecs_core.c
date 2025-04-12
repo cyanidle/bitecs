@@ -80,10 +80,9 @@ static void components_destroy_trivial(component_list* list)
     free(list);
 }
 
-// cal dtor for active
 static void components_destroy(bitecs_registry* reg, component_list* list)
 {
-    assert(false && "Not implemented");
+    assert(false && "todo");
 }
 
 typedef struct FreeList
@@ -231,6 +230,8 @@ typedef struct
     void* udata;
     QueryCtx queryContext;
     bitecs_index_t cursor;
+    Entity* begin;
+    bitecs_index_t count;
 } StepCtx;
 
 static bool bitecs_system_step(bitecs_registry* reg, StepCtx* ctx);
@@ -245,30 +246,30 @@ static bitecs_index_t bitecs_query_miss(
 
 static bool bitecs_system_step(bitecs_registry *reg, StepCtx* ctx)
 {
-    index_t begin = bitecs_query_match(ctx->cursor, &ctx->queryContext, reg->entities, reg->entities_count);
-    if (unlikely(begin == reg->entities_count)) return false;
-    index_t end = bitecs_query_miss(begin, &ctx->queryContext, reg->entities, reg->entities_count);
+    index_t offset = bitecs_query_match(ctx->cursor, &ctx->queryContext, ctx->begin, ctx->count);
+    if (unlikely(offset == ctx->count)) return false;
+    index_t end = bitecs_query_miss(offset, &ctx->queryContext, ctx->begin, ctx->count);
     bitecs_CallbackContext cb_ctx;
-    while (end > begin) {
-        index_t count = end - begin;
+    while (end > offset) {
+        index_t count = end - offset;
         index_t smallestRange = ~(index_t)0;
         bitecs_ptrs begins = ctx->ptrStorage;
         for (int i = 0; i < ctx->ncomps; ++i) {
             int comp = ctx->components[i];
             component_list* list = reg->components[comp];
-            index_t selected = select_up_to_chunk(list, begin, count, begins++);
+            index_t selected = select_up_to_chunk(list, offset, count, begins++);
             smallestRange = selected < smallestRange ? selected : smallestRange;
         }
-        cb_ctx.index = begin;
-        cb_ctx.entts = (bitecs_EntityProxy*)reg->entities + begin;
+        cb_ctx.index = offset;
+        cb_ctx.entts = (bitecs_EntityProxy*)ctx->begin + offset;
         ctx->system(ctx->udata, &cb_ctx, ctx->ptrStorage, smallestRange);
-        begin += smallestRange;
+        offset += smallestRange;
     }
     ctx->cursor = end;
     return end != reg->entities_count;
 }
 
-void bitecs_system_run(bitecs_registry *reg, bitecs_system_params* params)
+void bitecs_system_run(bitecs_registry *reg, bitecs_SystemParams* params)
 {
     if (unlikely(!params->comps->ncomps)) return;
     StepCtx ctx = {0};
@@ -280,6 +281,8 @@ void bitecs_system_run(bitecs_registry *reg, bitecs_system_params* params)
     ctx.udata = params->udata;
     ctx.components = params->comps->components;
     ctx.ncomps = params->comps->ncomps;
+    ctx.begin = reg->entities;
+    ctx.count = reg->entities_count;
     while (bitecs_system_step(reg, &ctx)) {
         // pass
     }
@@ -476,25 +479,44 @@ bool bitecs_entt_create(
 
 static void do_destroy_batch(bitecs_registry *reg, bitecs_index_t ptr, index_t count)
 {
-    // todo: it may be better to expand the mask to get active components
-    // not sure. needs testing
-    for (int i = 0; i < BITECS_MAX_COMPONENTS; ++i) {
-        component_list* list = reg->components[i];
-        if (!list) continue;
-        index_t cursor = ptr;
-        index_t cursor_count = count;
-        do {
-            void* begin;
-            index_t part = select_up_to_chunk(list, cursor, cursor_count, &begin);
-            if (list->meta.deleter) {
-                list->meta.deleter(begin, part);
+    reg->chunks_cleanup_pending = true;
+    dict_t wasDict = dead_entt;
+    mask_t wasMask = 0;
+    int ncomps = 0;
+    index_t same_arch_begin = ptr;
+    for (index_t i = ptr; i < ptr + count; ++i) {
+        Entity* e = reg->entities + i;
+        assert(e->dict != dead_entt);
+        if (e->dict != wasDict || e->components != wasMask) {
+            wasDict = e->dict;
+            wasMask = e->components;
+            bitecs_BitsStorage storage;
+            Ranks ranks;
+            bitecs_ranks_get(&ranks, e->dict);
+            ncomps = bitecs_mask_into_array((const SparseMask*)e, &ranks, storage);
+            for (int ci = 0; ci < ncomps; ++ci) {
+                int comp = storage[ci];
+                component_list* list = reg->components[comp];
+                assert(list && "Attempt to delete entt with nonexistend component");
+                index_t cursor = same_arch_begin;
+                index_t cursor_count = i + 1 - same_arch_begin;
+                do {
+                    void* begin;
+                    index_t selected = select_up_to_chunk(list, cursor, cursor_count, &begin);
+                    if (list->meta.deleter) {
+                        list->meta.deleter(begin, selected);
+                    }
+                    index_t chunk = cursor >> components_shift(list);
+                    list->chunks[chunk]->header.nalives -= selected;
+                    cursor += selected;
+                    cursor_count -= selected;
+                } while(cursor_count);
             }
-            // todo: reduce nalives here
-            cursor += part;
-            cursor_count -= part;
-        } while(cursor_count);
+            same_arch_begin = i;
+        }
+        e->generation = reg->generation;
+        e->dict = dead_entt;
     }
-    // generation already bumped on this range of entts
     if (likely(add_free(&reg->freeList, ptr, count))) {
         reg->total_free += count;
     }
@@ -509,8 +531,6 @@ void bitecs_entt_destroy_batch(bitecs_registry *reg, const bitecs_EntityPtr *ptr
         const bitecs_EntityPtr* ptr = ptrs + i;
         Entity* e = deref(reg, *ptr);
         if (e) {
-            e->generation = reg->generation;
-            e->dict = dead_entt;
             if (!count) {
                 begin = ptr->index;
                 continue;
@@ -536,8 +556,6 @@ void bitecs_entt_destroy(bitecs_registry *reg, bitecs_EntityPtr ptr)
     Entity* e = deref(reg, ptr);
     if (unlikely(!e)) return;
     reg->generation++;
-    e->generation = reg->generation;
-    e->dict = dead_entt;
     do_destroy_batch(reg, ptr.index, 1);
 }
 
@@ -767,22 +785,12 @@ bool bitecs_mask_get(const bitecs_SparseMask* mask, int index)
 _BITECS_FLATTEN
 bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count)
 {
-#ifndef NDEBUG
-    {
-        int _last = 0;
-        for (int i = 0; i < idxs_count; ++i) {
-            assert(idxs[i] >= 0 && "bitecs_mask_from_array(): Invalid input");
-            assert(idxs[i] < BITECS_MAX_COMPONENTS);
-            assert(_last <= idxs[i] && "bitecs_mask_from_array(): Unsorted input");
-            _last = idxs[i];
-        }
-    }
-#endif
     maskOut->dict = 0;
     maskOut->bits = 0;
     for (int i = 0; i < idxs_count; ++i) {
-        int value = idxs[i];
-        int group = value >> BITECS_GROUP_SHIFT;
+        int idx = idxs[i];
+        assert(idx < BITECS_MAX_COMPONENTS);
+        int group = idx >> BITECS_GROUP_SHIFT;
         if (unlikely(group > BITECS_BITS_IN_DICT)) {
             return false;
         }
@@ -792,27 +800,27 @@ bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idx
             return false;
         }
         maskOut->dict = newDict;
-        int bit = value & fill_up_to(BITECS_GROUP_SHIFT);
+        int bit = idx & fill_up_to(BITECS_GROUP_SHIFT);
         int shift = groupIndex * BITECS_GROUP_SIZE + bit;
         maskOut->bits |= (mask_t)1 << shift;
     }
     return true;
 }
 
-static void expand_one(int bitOffset, uint16_t part, int offset, bitecs_BitsStorage *storage) {
+static void expand_one(int bitOffset, uint16_t part, int offset, int *storage) {
     int bit = 0;
     int out = 0;
     while(part) {
         int trailing = ctz(part);
         bit += trailing;
-        (*storage)[offset + out++] = bitOffset + bit;
+        storage[offset + out++] = bitOffset + bit;
         part >>= trailing + 1;
         bit++;
     }
 }
 
 _BITECS_FLATTEN
-int bitecs_mask_into_array(const bitecs_SparseMask *mask, const bitecs_Ranks *ranks, bitecs_BitsStorage *storage)
+int bitecs_mask_into_array(const bitecs_SparseMask *mask, const bitecs_Ranks *ranks, int *storage)
 {
     const uint16_t* groups = (const uint16_t*)&mask->bits;
     int pcnt0 = popcnt32(groups[0]);
@@ -896,7 +904,7 @@ void bitecs_cleanup(bitecs_registry *reg, bitecs_cleanup_data *data)
     destroy_cleanup(data);
 }
 
-void bitecs_system_run_many(bitecs_registry *registry, bitecs_threadpool *tpool, bitecs_multi_system_params *systems)
+void bitecs_system_run_many(bitecs_registry *registry, bitecs_threadpool *tpool, bitecs_MultiSystemParams *systems)
 {
 
 }

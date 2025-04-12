@@ -61,7 +61,7 @@ class Registry
     void DoRunSystem(bitecs_flags_t flags, Fn& f, TypeList<Comps...> = {}) {
         static const Components<Comps...> comps;
         constexpr auto* system = impl::system_thunk<Fn, std::index_sequence_for<Comps...>, Comps...>::call;
-        bitecs_system_params params = {};
+        bitecs_SystemParams params = {};
         params.comps = &comps.list;
         params.system = system;
         params.flags = flags;

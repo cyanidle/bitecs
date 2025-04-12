@@ -104,7 +104,7 @@ TEST(Mask, FromToArray){
     bitecs_BitsStorage back;
     bitecs_Ranks ranks;
     bitecs_ranks_get(&ranks, mask.dict);
-    int count = bitecs_mask_into_array(&mask, &ranks, &back);
+    int count = bitecs_mask_into_array(&mask, &ranks, back);
     CHECK(count == std::size(init));
     for (int i = 0; i < count; ++i) {
         CHECK(init[i] == back[i]);
