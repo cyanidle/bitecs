@@ -120,7 +120,7 @@ struct system_thunk<Fn, std::index_sequence<Is...>, Comps...>
     _BITECS_FLATTEN
     static void call(bitecs_udata udata, CallbackContext* ctx, bitecs_ptrs outs, index_t count)
     {
-        Fn& f = *reinterpret_cast<Fn*>(udata);
+        Fn& f = *static_cast<Fn*>(udata);
         for (size_t i = 0; i < count; ++i) {
             if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
                 EntityPtr ptr;
@@ -144,7 +144,7 @@ struct multi_creator<Fn, std::index_sequence<Is...>, Comps...> {
     _BITECS_FLATTEN
     static void call(bitecs_udata udata, CallbackContext* ctx, bitecs_ptrs outs, index_t count)
     {
-        Fn& f = *reinterpret_cast<Fn*>(udata);
+        Fn& f = *static_cast<Fn*>(udata);
         for (index_t i = 0; i < count; ++i) {
             if constexpr (std::is_invocable_v<Fn, EntityPtr, Comps&...>) {
                 EntityPtr ptr;

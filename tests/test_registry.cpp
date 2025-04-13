@@ -23,6 +23,10 @@ static const auto counts = {1, 2, 10, 100, 200, 1000, 30000};
 
 #define CHECK ASSERT_TRUE
 
+static void System(Component1&) {
+
+}
+
 TEST(Systems, Basic)
 {
     Registry reg;
@@ -37,6 +41,7 @@ TEST(Systems, Basic)
         (void)reg.Entt(Component1{}, Component2{});
         (void)reg.Entt(Component2{});
         int iter = 0;
+        reg.RunSystem(bitecs::Func<System>{});
         reg.RunSystem<Component1>([&](EntityPtr ptr, Component1& c1){
             iter++;
         });

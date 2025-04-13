@@ -40,6 +40,26 @@ public:
     };
 };
 
+template<auto func, typename Sig>
+struct FuncBase;
+
+template<auto func, typename Ret, typename...Args>
+struct FuncBase<func, Ret(*)(Args...)>
+{
+    _BITECS_INLINE Ret operator()(Args...args) {
+        return func(std::forward<Args>(args)...);
+    }
+};
+
+template<auto func>
+struct Func : FuncBase<func, decltype(func)>
+{};
+
+#define BITFUNC(func) bitecs::Func<func>{}
+
+template<typename Fn>
+using if_not_function_ptr = std::enable_if_t<!std::is_function_v<Fn> && "Use BITFUNC(f)">;
+
 class Registry
 {
     bitecs_registry* reg;
@@ -49,7 +69,7 @@ class Registry
     {
         using seq = std::index_sequence_for<Comps...>;
         using creator = impl::multi_creator<Fn, seq, Comps...>;
-        if (!bitecs_entt_create(reg, count, &Components<Comps...>::list, creator::call, reinterpret_cast<void*>(&populate))) {
+        if (!bitecs_entt_create(reg, count, &Components<Comps...>::list, creator::call, &populate)) {
             throw std::runtime_error("Could not create entts");
         }
     }
@@ -62,7 +82,7 @@ class Registry
         params.comps = &Components<Comps...>::list;
         params.system = system;
         params.flags = flags;
-        params.udata = reinterpret_cast<void*>(&f);
+        params.udata = &f;
         bitecs_system_run(reg, &params);
     }
 
@@ -93,7 +113,7 @@ public:
         return bitecs_component_define(reg, component_id<T>, meta);
     }
 
-    template<typename...Comps, typename Fn>
+    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
     void RunSystem(bitecs_flags_t flags, Fn& f) {
         if constexpr (sizeof...(Comps) == 0) {
             using args = impl::deduce_args_t<Fn>;
@@ -107,17 +127,17 @@ public:
         }
     }
 
-    template<typename...Comps, typename Fn>
+    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
     void RunSystem(bitecs_flags_t flags, Fn&& f) {
         RunSystem<Comps...>(flags, f);
     }
 
-    template<typename...Comps, typename Fn>
+    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
     void RunSystem(Fn&& f) {
         RunSystem<Comps...>(0, f);
     }
 
-    template<typename...Comps, typename Fn>
+    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
     void Entts(index_t count, Fn& populate)
     {
         if constexpr (sizeof...(Comps) == 0) {
@@ -131,7 +151,7 @@ public:
             DoEntts<Comps...>(count, populate);
         }
     }
-    template<typename...Comps, typename Fn>
+    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
     void Entts(index_t count, Fn&& populate) {
         Entts<Comps...>(count, populate);
     }

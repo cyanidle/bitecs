@@ -276,7 +276,8 @@ void bitecs_system_run(bitecs_registry *reg, bitecs_SystemParams* params)
     ctx.queryContext.flags = params->flags;
     ctx.queryContext.query = params->comps->mask;
     bitecs_ranks_get(&ctx.queryContext.ranks, ctx.queryContext.query.dict);
-    ctx.ptrStorage = alloca(sizeof(void*) * params->comps->ncomps);
+    void* ptrs[params->comps->ncomps];
+    ctx.ptrStorage = ptrs;
     ctx.system = params->system;
     ctx.udata = params->udata;
     ctx.components = params->comps->components;
@@ -442,7 +443,7 @@ bool bitecs_entt_create(
     } else {
         reg->total_free -= count;
     }
-    for (int i = 0; i < components->ncomps; ++i) {
+    for (unsigned i = 0; i < components->ncomps; ++i) {
         int comp = components->components[i];
         component_list* list = reg->components[comp];
         if (unlikely(!list)) return false;
@@ -455,11 +456,11 @@ bool bitecs_entt_create(
         reg->entities[i].flags = 0;
     }
     index_t cursor = found;
-    void** begins = alloca(sizeof(void*) * components->ncomps);
+    void* begins[components->ncomps];
     bitecs_CallbackContext cb_ctx;
     while (count) {
         index_t smallestRange = count;
-        for (int i = 0; i < components->ncomps; ++i) {
+        for (unsigned i = 0; i < components->ncomps; ++i) {
             int comp = components->components[i];
             component_list* list = reg->components[comp];
             index_t added;
@@ -783,12 +784,12 @@ bool bitecs_mask_get(const bitecs_SparseMask* mask, int index)
 }
 
 _BITECS_FLATTEN
-bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idxs_count)
+bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, unsigned idxs_count)
 {
 #ifndef NDEBUG
     {
         int _last = 0;
-        for (int i = 0; i < idxs_count; ++i) {
+        for (unsigned i = 0; i < idxs_count; ++i) {
             assert(idxs[i] >= 0 && "bitecs_mask_from_array(): Invalid input");
             assert(idxs[i] < BITECS_MAX_COMPONENTS);
             assert(_last <= idxs[i] && "bitecs_mask_from_array(): Unsorted input");
@@ -798,7 +799,7 @@ bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, int idx
 #endif
     maskOut->dict = 0;
     maskOut->bits = 0;
-    for (int i = 0; i < idxs_count; ++i) {
+    for (unsigned i = 0; i < idxs_count; ++i) {
         int idx = idxs[i];
         int group = idx >> BITECS_GROUP_SHIFT;
         if (unlikely(group > BITECS_BITS_IN_DICT)) {
@@ -830,7 +831,7 @@ static void expand_one(int bitOffset, uint16_t part, int offset, int *storage) {
 }
 
 _BITECS_FLATTEN
-int bitecs_mask_into_array(const bitecs_SparseMask *mask, const bitecs_Ranks *ranks, int *storage)
+unsigned bitecs_mask_into_array(const bitecs_SparseMask *mask, const bitecs_Ranks *ranks, int *storage)
 {
     const uint16_t* groups = (const uint16_t*)&mask->bits;
     int pcnt0 = popcnt32(groups[0]);

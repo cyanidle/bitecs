@@ -1,4 +1,5 @@
-﻿#include "components.hpp"
+﻿#include "bitecs/bitecs.hpp"
+#include "components.hpp"
 #include <benchmark/benchmark.h>
 
 struct ECS_Interface
@@ -86,13 +87,13 @@ static void RunSystems(ECS& ecs)
     ecs.template RunSystem<DataComponent>([&](auto& data){
         updateData(data, 1.f/60.f);
     });
-    ecs.template RunSystem<HealthComponent>(updateHealth);
-    ecs.template RunSystem<HealthComponent, DamageComponent>(updateDamage);
-    ecs.template RunSystem<PositionComponent, VelocityComponent, DataComponent>(updateComplex);
+    ecs.template RunSystem<HealthComponent>(BITFUNC(updateHealth));
+    ecs.template RunSystem<HealthComponent, DamageComponent>(BITFUNC(updateDamage));
+    ecs.template RunSystem<PositionComponent, VelocityComponent, DataComponent>(BITFUNC(updateComplex));
     ecs.template RunSystem<PositionComponent, VelocityComponent>([&](auto& pos, auto& dir){
         updatePosition(pos, dir, 1.f/60.f);
     });
-    ecs.template RunSystem<SpriteComponent, PlayerComponent, HealthComponent>(updateSprite);
+    ecs.template RunSystem<SpriteComponent, PlayerComponent, HealthComponent>(BITFUNC(updateSprite));
     FrameBuffer buffer(rand() % 100, rand() & 200);
     ecs.template RunSystem<SpriteComponent, PositionComponent>([&](auto& sprite, auto& pos){
         renderSprite(buffer, pos, sprite);
