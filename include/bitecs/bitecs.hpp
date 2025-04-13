@@ -19,7 +19,7 @@ struct SparseMask
 {
     bitecs_SparseMask mask = {};
     SparseMask() = default;
-    SparseMask(const int* bits, int nbits) {
+    explicit SparseMask(const int* bits, unsigned nbits) {
         if (!bitecs_mask_from_array(&mask, bits, nbits)) {
             throw std::runtime_error("Cannot construct sparse bitmask");
         }
