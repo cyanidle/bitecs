@@ -30,7 +30,7 @@ extern "C" {
 #define BITECS_GROUP_SIZE 16
 #define BITECS_GROUP_SHIFT 4
 #define BITECS_GROUPS_COUNT 4
-#define BITECS_FREQUENCY_ADJUST 5
+#define BITECS_FREQUENCY_ADJUST 6
 #define BITECS_BITS_IN_DICT 64
 #define BITECS_MAX_COMPONENTS (BITECS_GROUP_SIZE * BITECS_BITS_IN_DICT)
 
@@ -39,7 +39,7 @@ typedef uint64_t bitecs_dict_t;
 typedef BITECS_INDEX_T bitecs_index_t;
 typedef uint32_t bitecs_generation_t;
 typedef uint32_t bitecs_flags_t;
-typedef int bitecs_comp_id_t;
+typedef unsigned bitecs_comp_id_t;
 
 typedef struct
 {
@@ -75,9 +75,9 @@ typedef struct
 
 typedef struct {
     bitecs_dict_t select_dict_masks[BITECS_GROUPS_COUNT];
-    int group_ranks[BITECS_GROUPS_COUNT];
+    unsigned group_ranks[BITECS_GROUPS_COUNT];
     bitecs_dict_t highest_select_mask;
-    int groups_count;
+    unsigned groups_count;
 } bitecs_Ranks;
 
 void bitecs_ranks_get(bitecs_Ranks* out, bitecs_dict_t dict);
@@ -138,7 +138,7 @@ typedef void (*bitecs_Callback)(bitecs_udata udata, bitecs_CallbackContext* ctx,
 typedef struct
 {
     bitecs_SparseMask mask;
-    const int* components;
+    const unsigned* components;
     unsigned ncomps;
 } bitecs_ComponentsList;
 
@@ -180,14 +180,14 @@ typedef struct {
 
 void bitecs_system_run_many(bitecs_registry* registry, bitecs_threadpool* tpool, bitecs_MultiSystemParams* systems);
 
-_BITECS_NODISCARD bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const int *idxs, unsigned idxs_count);
-_BITECS_NODISCARD bool bitecs_mask_set(bitecs_SparseMask* mask, int index, bool state);
-_BITECS_NODISCARD bool bitecs_mask_get(const bitecs_SparseMask* mask, int index);
+_BITECS_NODISCARD bool bitecs_mask_from_array(bitecs_SparseMask *maskOut, const bitecs_comp_id_t *idxs, unsigned idxs_count);
+_BITECS_NODISCARD bool bitecs_mask_set(bitecs_SparseMask* mask, bitecs_comp_id_t index, bool state);
+_BITECS_NODISCARD bool bitecs_mask_get(const bitecs_SparseMask* mask, bitecs_comp_id_t index);
 
-typedef int bitecs_BitsStorage[128];
+typedef bitecs_comp_id_t bitecs_BitsStorage[128];
 // returns N bits, that got written to storage*
 _BITECS_NODISCARD
-unsigned bitecs_mask_into_array(const bitecs_SparseMask* mask, const bitecs_Ranks* ranks, int* storage);
+unsigned bitecs_mask_into_array(const bitecs_SparseMask* mask, const bitecs_Ranks* ranks, bitecs_comp_id_t* storage);
 
 
 typedef struct bitecs_cleanup_data bitecs_cleanup_data;

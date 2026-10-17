@@ -30,11 +30,11 @@ struct Tag {};
 
 template<typename T>
 struct component_info {
-    static constexpr int id = T::bitecs_id;
+    static constexpr unsigned id = T::bitecs_id;
 };
 
 template<typename T>
-constexpr int component_id = component_info<T>::id;
+constexpr unsigned component_id = component_info<T>::id;
 
 #define BITECS_COMPONENT(T, _id) \
 template<> struct bitecs::component_info<T> { \
@@ -58,14 +58,14 @@ constexpr bool no_duplicates() {
     return true;
 }
 
-constexpr int count_groups(const int* comps, int ncomps) {
+constexpr unsigned count_groups(const unsigned* comps, unsigned ncomps) {
     bool groups[BITECS_MAX_COMPONENTS] = {};
-    for (int i = 0; i < ncomps; ++i) {
-        int comp = comps[i];
-        int group = comp >> BITECS_GROUP_SHIFT;
+    for (unsigned i = 0; i < ncomps; ++i) {
+        unsigned comp = comps[i];
+        unsigned group = comp >> BITECS_GROUP_SHIFT;
         groups[group] = true;
     }
-    int count = 0;
+    unsigned count = 0;
     for (auto hit: groups) {
         if (hit) count++;
     }
@@ -73,14 +73,14 @@ constexpr int count_groups(const int* comps, int ncomps) {
 }
 
 template<typename...Comps>
-constexpr std::array<int, sizeof...(Comps)> sorted_ids()
+constexpr std::array<unsigned, sizeof...(Comps)> sorted_ids()
 {
-    std::array<int, sizeof...(Comps)> res = {component_id<Comps>...};
-    for (int i = 0; i < res.size(); ++i) {
-        for (int j = 0; j < res.size(); ++j) {
+    std::array<unsigned, sizeof...(Comps)> res = {component_id<Comps>...};
+    for (unsigned i = 0; i < res.size(); ++i) {
+        for (unsigned j = 0; j < res.size(); ++j) {
             if (i == j) continue;
             if (res[i] < res[j]) {
-                int tmp = res[i];
+                unsigned tmp = res[i];
                 res[i] = res[j];
                 res[j] = tmp;
             }
@@ -169,19 +169,25 @@ auto remove_cvref(Tag<const T>) -> T;
 template<typename T>
 auto remove_cvref(Tag<T&>) -> decltype(impl::remove_cvref(Tag<T>{}));
 
-auto deduce_args(...) -> void;
+template<typename...Args>
+auto clean_args(TypeList<Args...>) -> TypeList<decltype(impl::remove_cvref(Tag<Args>{}))...>;
 
 template<typename...Args>
-using clean_args = TypeList<decltype(impl::remove_cvref(Tag<Args>{}))...>;
+auto clean_args(TypeList<EntityPtr, Args...>) -> TypeList<decltype(impl::remove_cvref(Tag<Args>{}))...>;
+
+template<typename...Args>
+auto clean_args(TypeList<EntityProxy*, Args...>) -> TypeList<decltype(impl::remove_cvref(Tag<Args>{}))...>;
+
+auto deduce_args(...) -> void;
 
 template<typename Ret, typename...Args>
-auto deduce_args(Ret(*)(Args...)) -> clean_args<Args...>;
+auto deduce_args(Ret(*)(Args...)) -> decltype(impl::clean_args(TypeList<Args...>{}));
 
 template<typename Ret, typename C, typename...Args>
-auto deduce_args(Ret(C::*)(Args...)) -> clean_args<Args...>;
+auto deduce_args(Ret(C::*)(Args...)) -> decltype(impl::clean_args(TypeList<Args...>{}));
 
 template<typename Ret, typename C, typename...Args>
-auto deduce_args(Ret(C::*)(Args...) const) -> clean_args<Args...>;
+auto deduce_args(Ret(C::*)(Args...) const) -> decltype(impl::clean_args(TypeList<Args...>{}));
 
 template<typename Fn, typename = decltype(&Fn::operator())>
 auto deduce_args(Fn) -> decltype(impl::deduce_args(&Fn::operator()));

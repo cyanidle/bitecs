@@ -19,12 +19,38 @@ struct Component3 {
     enum {bitecs_id = 1003};
 };
 
+static int Instances;
+struct Counter {
+    enum {bitecs_id = 500};
+    Counter() {
+        Instances++;
+    }
+    ~Counter() {
+        Instances--;
+    }
+};
+
 static const auto counts = {1, 2, 10, 100, 200, 1000, 30000};
 
 #define CHECK ASSERT_TRUE
 
 static void System(Component1&) {
 
+}
+
+TEST(Entt, Dtors)
+{
+    for (size_t count: counts) {
+        {
+            Registry reg;
+            reg.DefineComponent<Counter>(bitecs_freq3);
+            reg.DefineComponent<Component3>(bitecs_freq2);
+            reg.Entts(count, [](Counter&){});
+            reg.Entts(count, [](Component3&){});
+            CHECK(Instances == count);
+        }
+        CHECK(Instances == 0);
+    }
 }
 
 TEST(Systems, Basic)
@@ -41,7 +67,7 @@ TEST(Systems, Basic)
         (void)reg.Entt(Component1{}, Component2{});
         (void)reg.Entt(Component2{});
         int iter = 0;
-        reg.RunSystem(bitecs::Func<System>{});
+        reg.RunSystem(BITFUNC(System));
         reg.RunSystem<Component1>([&](EntityPtr ptr, Component1& c1){
             iter++;
         });
@@ -73,7 +99,7 @@ TEST(Entts, MultiCreate) {
     int prev_counts = 0;
     for (int count: counts) {
         int iter = 0;
-        reg.Entts<Component2, Component1>(count, [&](EntityPtr ptr, Component2& c2, Component1& c1){
+        reg.Entts(count, [&](EntityPtr ptr, Component2& c2, Component1& c1){
             iter++;
             c1.a = iter;
             c1.b = iter * 2;

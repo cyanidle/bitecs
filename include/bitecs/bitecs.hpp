@@ -19,7 +19,7 @@ struct SparseMask
 {
     bitecs_SparseMask mask = {};
     SparseMask() = default;
-    explicit SparseMask(const int* bits, unsigned nbits) {
+    explicit SparseMask(const unsigned* bits, unsigned nbits) {
         if (!bitecs_mask_from_array(&mask, bits, nbits)) {
             throw std::runtime_error("Cannot construct sparse bitmask");
         }
@@ -30,7 +30,7 @@ template<typename...Comps>
 class Components
 {
     static_assert(impl::no_duplicates<Comps...>());
-    static constexpr int data[] = {component_id<Comps>...};
+    static constexpr unsigned data[] = {component_id<Comps>...};
     static constexpr auto sorted = impl::sorted_ids<Comps...>();
     static constexpr int size = sizeof...(Comps);
     static_assert(impl::count_groups(data, size) <= BITECS_GROUPS_COUNT);
@@ -52,13 +52,12 @@ struct FuncBase<func, Ret(*)(Args...)>
 };
 
 template<auto func>
-struct Func : FuncBase<func, decltype(func)>
-{};
+struct Func : FuncBase<func, decltype(func)> {};
 
 #define BITFUNC(func) bitecs::Func<func>{}
 
 template<typename Fn>
-using if_not_function_ptr = std::enable_if_t<!std::is_function_v<Fn> && "Use BITFUNC(f)">;
+using valid_callback = std::enable_if_t<!std::is_function_v<Fn> && "Use BITFUNC(f)">;
 
 class Registry
 {
@@ -103,8 +102,10 @@ public:
 
     template<typename T>
     bool DefineComponent(bitecs_Frequency freq = bitecs_Frequency::bitecs_freq5) {
-        bitecs_ComponentMeta meta {std::is_empty_v<T> ? 0 : sizeof(T), freq, nullptr};
-        if constexpr (!std::is_trivially_destructible_v<T>) {
+        constexpr bool trivial_dtor = std::is_trivially_destructible_v<T>;
+        constexpr bool empty = std::is_empty_v<T> && trivial_dtor;
+        bitecs_ComponentMeta meta {empty ? 0 : sizeof(T), freq, nullptr};
+        if constexpr (!trivial_dtor) {
             meta.deleter = impl::deleter_for<T>;
         }
         if constexpr (!std::is_trivially_move_constructible_v<T>) {
@@ -113,7 +114,7 @@ public:
         return bitecs_component_define(reg, component_id<T>, meta);
     }
 
-    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
+    template<typename...Comps, typename Fn, typename = valid_callback<Fn>>
     void RunSystem(bitecs_flags_t flags, Fn& f) {
         if constexpr (sizeof...(Comps) == 0) {
             using args = impl::deduce_args_t<Fn>;
@@ -127,17 +128,17 @@ public:
         }
     }
 
-    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
+    template<typename...Comps, typename Fn, typename = valid_callback<Fn>>
     void RunSystem(bitecs_flags_t flags, Fn&& f) {
         RunSystem<Comps...>(flags, f);
     }
 
-    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
+    template<typename...Comps, typename Fn, typename = valid_callback<Fn>>
     void RunSystem(Fn&& f) {
         RunSystem<Comps...>(0, f);
     }
 
-    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
+    template<typename...Comps, typename Fn, typename = valid_callback<Fn>>
     void Entts(index_t count, Fn& populate)
     {
         if constexpr (sizeof...(Comps) == 0) {
@@ -151,7 +152,7 @@ public:
             DoEntts<Comps...>(count, populate);
         }
     }
-    template<typename...Comps, typename Fn, typename = if_not_function_ptr<Fn>>
+    template<typename...Comps, typename Fn, typename = valid_callback<Fn>>
     void Entts(index_t count, Fn&& populate) {
         Entts<Comps...>(count, populate);
     }
