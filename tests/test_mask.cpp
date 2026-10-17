@@ -28,6 +28,11 @@ TEST(Mask, Ranks)
     CHECK(ranks.select_dict_masks[1] == 0b11);
     CHECK(ranks.select_dict_masks[2] == 0b1111);
     CHECK(ranks.select_dict_masks[3] == 0b11111);
+    bitecs_ranks_get(&ranks, (bitecs_dict_t)1 << 63);
+    CHECK(ranks.groups_count == 1);
+    CHECK(ranks.group_ranks[0] == 63);
+    CHECK(ranks.select_dict_masks[0] == ~((bitecs_dict_t)1 << 63));
+    CHECK(ranks.highest_select_mask == ranks.select_dict_masks[0]);
 }
 
 TEST(Mask, GetSet) {
@@ -159,6 +164,29 @@ TEST(Components, List)
     CHECK(count == 1);
     CHECK(back[0] == 1003);
 }
+
+TEST(Mask, RemoveMiddleGroup)
+{
+    unsigned init[] = {1, 33, 50};
+    bitecs_SparseMask mask;
+    CHECK(bitecs_mask_from_array(&mask, init, std::size(init)) == true);
+    CHECK(mask.dict == 0b1101);
+
+    CHECK(bitecs_mask_set(&mask, 33, false) == true);
+    CHECK(mask.dict == 0b1001);
+    CHECK(bitecs_mask_get(&mask, 1) == true);
+    CHECK(bitecs_mask_get(&mask, 33) == false);
+    CHECK(bitecs_mask_get(&mask, 50) == true);
+
+    bitecs_BitsStorage back;
+    bitecs_Ranks ranks;
+    bitecs_ranks_get(&ranks, mask.dict);
+    int count = bitecs_mask_into_array(&mask, &ranks, back);
+    CHECK(count == 2);
+    CHECK(back[0] == 1);
+    CHECK(back[1] == 50);
+}
+
 
 struct Test101 {
     enum {bitecs_id = 101};

@@ -55,9 +55,9 @@ typedef struct
 
 typedef struct
 {
-    // which groups of 32 bits are active out of 64 total (max components registered: 2048)
+    // which groups of BITECS_GROUP_SIZE bits are active out of 64 total (max components registered: BITECS_GROUP_SIZE * 64)
     bitecs_dict_t dict;
-    // 4 groups of 32 bits. 4-128 active on single entt at the same time
+    // BITECS_GROUPS_COUNT groups of BITECS_GROUP_SIZE bits. BITECS_GROUPS_COUNT * BITECS_GROUP_SIZE active on single entt at the same time
     bitecs_mask_t components;
     // generation make all EntityPtr weak references (check if this actually is still alive entt)
     bitecs_generation_t generation;

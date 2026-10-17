@@ -1,5 +1,8 @@
 ﻿#include "bitecs/bitecs.hpp"
 #include "components.hpp"
+#include <algorithm>
+#include <type_traits>
+#include <utility>
 #include <benchmark/benchmark.h>
 
 struct ECS_Interface
@@ -43,6 +46,7 @@ static void CreateEntities(benchmark::State& state, ECS& ecs)
     size_t ndata = state.range(0);
     size_t nheroes = state.range(1);
     size_t nmonsters = state.range(2);
+    size_t nactors = nheroes + nmonsters;
 
     ecs.template RegisterComponents<
         HealthComponent, PlayerComponent, DataComponent, SmallComponent,
@@ -51,17 +55,16 @@ static void CreateEntities(benchmark::State& state, ECS& ecs)
 
     std::vector<DataComponent> datas(ndata);
     std::vector<SmallComponent> empt(ndata);
-    ecs.CreateManyEntts(ndata, datas.data(), empt.data());
 
-    std::vector<DataComponent> alive_datas(nheroes + nmonsters);
-    std::vector<HealthComponent> healths(nheroes + nmonsters);
-    std::vector<PositionComponent> poses(nheroes + nmonsters);
-    std::vector<VelocityComponent> vels(nheroes + nmonsters);
-    std::vector<DamageComponent> dmgs(nheroes + nmonsters);
-    std::vector<SpriteComponent> sprites(nheroes + nmonsters);
-    std::vector<PlayerComponent> players(nheroes + nmonsters);
+    std::vector<DataComponent> alive_datas(nactors);
+    std::vector<HealthComponent> healths(nactors);
+    std::vector<PositionComponent> poses(nactors);
+    std::vector<VelocityComponent> vels(nactors);
+    std::vector<DamageComponent> dmgs(nactors);
+    std::vector<SpriteComponent> sprites(nactors);
+    std::vector<PlayerComponent> players(nactors);
 
-    for (size_t i{0}; i < nheroes + nmonsters; ++i) {
+    for (size_t i{0}; i < nactors; ++i) {
         alive_datas[i].rng.seed(i);
         healths[i].maxhp = i & 1 ? 100 : 200;
         healths[i].status = StatusEffect::Spawn;
@@ -76,9 +79,29 @@ static void CreateEntities(benchmark::State& state, ECS& ecs)
         }
     }
 
-    ecs.CreateManyEntts(nheroes + nmonsters,
-                        alive_datas.data(), healths.data(), poses.data(),
-                        vels.data(), dmgs.data(), sprites.data(), players.data());
+    const size_t total = ndata + nactors;
+    if (!total) return;
+    constexpr size_t interleaveGroupSize = 1024;
+    size_t dataDone = 0;
+    size_t actorDone = 0;
+    for (size_t groupBegin = 0; groupBegin < total; groupBegin += interleaveGroupSize) {
+        const size_t groupEnd = std::min(groupBegin + interleaveGroupSize, total);
+        const size_t dataEnd = groupEnd * ndata / total;
+        const size_t actorEnd = groupEnd - dataEnd;
+
+        if (size_t count = dataEnd - dataDone) {
+            ecs.CreateManyEntts(count, datas.data() + dataDone, empt.data() + dataDone);
+            dataDone = dataEnd;
+        }
+        if (size_t count = actorEnd - actorDone) {
+            ecs.CreateManyEntts(count,
+                                alive_datas.data() + actorDone, healths.data() + actorDone,
+                                poses.data() + actorDone, vels.data() + actorDone,
+                                dmgs.data() + actorDone, sprites.data() + actorDone,
+                                players.data() + actorDone);
+            actorDone = actorEnd;
+        }
+    }
 }
 
 template<typename ECS>
@@ -119,12 +142,31 @@ static void BM_Systems(benchmark::State& state)
     }
 }
 
+namespace benchmark_detail
+{
+
+template<typename ECS, typename = void>
+struct has_clear : std::false_type {};
+
+template<typename ECS>
+struct has_clear<ECS, std::void_t<decltype(std::declval<ECS&>().Clear())>> : std::true_type {};
+
+}
+
 template<typename ECS>
 static void BM_Create_Destroy(benchmark::State& state)
 {
-    for ([[maybe_unused]] auto _: state) {
+    if constexpr (benchmark_detail::has_clear<ECS>::value) {
         ECS ecs;
-        CreateEntities(state, ecs);
+        for ([[maybe_unused]] auto _: state) {
+            CreateEntities(state, ecs);
+            ecs.Clear();
+        }
+    } else {
+        for ([[maybe_unused]] auto _: state) {
+            ECS ecs;
+            CreateEntities(state, ecs);
+        }
     }
 }
 

@@ -688,6 +688,9 @@ void bitecs_ranks_get(bitecs_Ranks* res, dict_t dict)
         int i = res->groups_count++;
         res->group_ranks[i] = rank;
         res->select_dict_masks[i] = fill_up_to(rank);
+        if (trailing == BITECS_BITS_IN_DICT - 1) {
+            break;
+        }
         dict >>= trailing + 1;
         rank++;
     }
@@ -810,9 +813,8 @@ bool bitecs_mask_set(bitecs_SparseMask* mask, unsigned index, bool state)
         if (unlikely(!(mask->bits & selectGroup))) { //last bit in group
             mask->dict &= ~(mask_t)((mask_t)1 << (mask_t)group); //unset group in dict
             // readjust mask to reflect changed dict (recompact)
-            mask_t selectTail = (mask_t)fill_up_to(BITECS_GROUP_SIZE * group);
+            mask_t selectTail = (mask_t)fill_up_to(BITECS_GROUP_SIZE * groupIndex);
             mask_t selectHead = ~selectTail;
-            // TODO: this is broken. 101 | 303 -> remove 101 -> leaves 15! (not 303!)
             mask_t newHead = ((mask->bits & selectHead) >> BITECS_GROUP_SIZE);
             mask_t newTail = (mask->bits & selectTail);
             mask->bits = newHead | newTail;
@@ -828,12 +830,14 @@ bool bitecs_mask_get(const bitecs_SparseMask* mask, unsigned index)
     assert(index < BITECS_MAX_COMPONENTS);
     int group = index >> BITECS_GROUP_SHIFT;
     int bit = index & fill_up_to(BITECS_GROUP_SHIFT);
+    dict_t temp_dict = (dict_t)1 << group;
+    if (unlikely(!(mask->dict & temp_dict))) {
+        return false;
+    }
     int groupIndex = dict_popcnt(mask->dict & fill_up_to(group));
     int shift = groupIndex * BITECS_GROUP_SIZE + bit;
-    dict_t temp_dict = (dict_t)1 << group;
-    bool dict_match = mask->dict & temp_dict;
     bool bits_match = mask->bits & (mask_t)1 << shift;
-    return dict_match && bits_match;
+    return bits_match;
 }
 
 _BITECS_FLATTEN

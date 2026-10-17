@@ -47,6 +47,9 @@ struct Flecs
     Component& GetComponent(Entity entt) {
         return *entt.get_ref<Component>().get();
     }
+    void Clear() {
+        world.delete_with<DataComponent>();
+    }
 };
 
 ECS_BENCHMARKS(Flecs);
