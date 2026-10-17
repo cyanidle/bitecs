@@ -60,7 +60,7 @@ TEST(Systems, Basic)
     reg.DefineComponent<Component2>(bitecs_freq5);
     reg.DefineComponent<Component3>(bitecs_freq9);
     int prev_counts = 1;
-    for (int i: counts) {
+    for (int _: counts) {
         (void)reg.Entt(Component1{}, Component2{});
         (void)reg.Entt(Component3{});
         (void)reg.Entt(Component1{}, Component3{});

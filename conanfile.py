@@ -35,7 +35,6 @@ class BitECS(ConanFile):
             self.test_requires("flecs/4.0.4")
             self.test_requires("entt/3.14.0")
             self.test_requires("entityx/1.3.0")
-            self.test_requires("gaia-ecs/0.8.6")
 
     def generate(self):
         deps = CMakeDeps(self)

@@ -5,7 +5,7 @@ Guidance for AI coding agents working on `bitecs`.
 ## What this project is
 
 `bitecs` is a cache-friendly ECS (entity component system): a C17 core with a header-only C++17
-wrapper, plus a benchmark suite comparing it with flecs, EnTT, entityx, gaia, ginseng and mustache.
+wrapper, plus a benchmark suite comparing it with flecs, EnTT, entityx, ginseng and mustache.
 
 - `include/bitecs/bitecs_core.h` — public C API: entity/component types, masks, registry, systems.
 - `src/bitecs_core.c` — C implementation (storage, queries, cleanup). Compiled as C, never as C++.
@@ -19,8 +19,10 @@ There is no README; this file is the entry point. License: MIT (see `LICENSE`).
 
 ## Build and test
 
-Requirements: CMake >= 3.16, a C17/C++17 compiler, Ninja (recommended), Conan 2 (>= 2.0.5) for
-dependencies. Conan is bootstrapped by CMake and detects the default profile automatically.
+Requirements: CMake >= 3.20 for the documented flow (the top-level project declares 3.16, but
+`cmake/conan2.cmake` needs >= 3.19 and uses the 3.20 `cmake_path` API, and `ctest --test-dir` needs
+3.20), a C17/C++17 compiler, Ninja (recommended), and Conan 2 (>= 2.0.5) for dependencies. Conan is
+bootstrapped by CMake and detects the default profile automatically.
 
 ### Tests (normal Conan flow)
 
@@ -55,7 +57,7 @@ Conan is invoked even when `CONAN_BUILDING=ON`.
 ```sh
 cmake -S . -B build/bench -G Ninja -DCMAKE_BUILD_TYPE=Release -DBITECS_BENCH=ON
 cmake --build build/bench -j
-./build/bench/bitecs_bench --benchmark_filter='Bitecs/BM_Systems'
+./build/bench/bitecs_bench --benchmark_filter='BM_Systems<Bitecs>'
 ```
 
 The first configure downloads `ginseng` and `mustache` from GitHub through CPM, so it needs network
@@ -70,7 +72,8 @@ conan build . -o '&:bench=True'
 
 This builds the library and, with the option, the benchmarks. The recipe declares gtest as a
 `test_requires` but does not enable `BITECS_TEST`, so the test executable is built through the CMake
-flow above.
+flow above. Because `BITECS_BENCH` alone enters the Conan block in `CMakeLists.txt`, this path also
+performs a nested `conan install`; use the plain CMake benchmark flow if that is unwanted.
 
 Existing `build/GCC-*` and `build/Clang-*` directories are local IDE artifacts and are gitignored;
 they may reference stale Conan paths. Prefer a fresh build directory.
@@ -88,12 +91,15 @@ they may reference stale Conan paths. Prefer a fresh build directory.
 ## How the ECS works
 
 - **Entities** are a dense array of `{dict, components, generation, flags}`. Index + generation form
-  `EntityPtr`; destroying bumps the generation, so stale pointers are rejected by `deref`. Freed
-  indices go to a coalescing free list and are reused.
+  `EntityPtr`; `deref` compares the generation so stale pointers can be rejected. The intended
+  invalidation on destroy is currently broken for the first entity of a batch — see "Known rough
+  edges". Freed indices go to a coalescing free list and are reused.
 - **Components** are stored per component type in aligned chunks. Chunk capacity is
   `1 << (frequency + BITECS_FREQUENCY_ADJUST)` (`frequency` is `freq1..freq9`, `ADJUST` is 6), and
-  each chunk tracks `nalives` for deferred cleanup. Empty trivially-destructible types are tags:
-  `typesize == 0`, no storage.
+  each chunk tracks `nalives` for deferred cleanup. Empty trivially-destructible types are intended
+  to be tags (`typesize == 0`, no storage), and the query/chunk paths handle them — but
+  `bitecs_component_define` currently asserts `typesize > 0`, so defining a tag aborts in Debug
+  builds. See "Known rough edges".
 - **Sparse masks** encode an entity's component set in two words: `dict` marks which 16-id groups
   are present; `bits` holds four 16-bit fields compacted by group *rank*. Queries rank-adjust the
   query mask per entity when the entity has groups the query does not. This is the central trick;
@@ -159,12 +165,12 @@ Rules that are easy to violate:
 - Match the surrounding style: 4-space indentation, LF endings, braces on their own line for
   functions/classes, no formatter config exists.
 - C layer: `bitecs_` prefix on public symbols, snake_case, plain C types, `extern "C"` in the header,
-  only C standard headers in `bitecs_core.h`. No exceptions, no allocation-free promises that the
-  code does not keep.
+  only C standard headers in `bitecs_core.h`. No exceptions; failures are `false`/`NULL`.
 - C++ layer: PascalCase types, CamelCase `Registry` methods, internals under `bitecs::impl`,
   `_BITECS_INLINE`/`_BITECS_FLATTEN` on hot helpers. Keep the wrapper header-only.
-- Files start with the MIT header comment. Several headers and benchmarks are UTF-8 with a BOM;
-  preserve the existing BOM and line endings when editing.
+- The C core and the public C++ headers start with the MIT header comment; tests and benchmarks
+  generally do not. Several headers and benchmarks are UTF-8 with a BOM; preserve the existing BOM
+  and line endings when editing.
 - Comments are sparse and usually mark non-obvious invariants or TODOs. Do not add narration;
   preserve existing TODO/design notes unless the issue is actually resolved.
 - The core uses GCC/Clang builtins (`__builtin_expect`, popcount, ctz), C11 atomics and VLAs. The
@@ -193,21 +199,37 @@ These are in the code today; verify before relying on them or treat them as work
 - `bitecs_mask_set` uses the raw group number instead of the group rank when recompacting after the
   last bit of a group is removed (`fill_up_to(BITECS_GROUP_SIZE * group)`); there is a TODO and a
   reproducing test (`Mask.Remove`: 101 | 303, remove 101, 303 is lost). Mask removal is not reliable
-  until this is fixed.
-- `bitecs_entt_destroy_batch` never starts its run counter, so it destroys nothing; use
-  `bitecs_entt_destroy` per entity until fixed. The wrapper's `DestroyBatch` exposes it.
+  until this is fixed. The corrupted mask later makes `Cleanup.Basic` resolve component id 15
+  during `destroy_all`, where no component is registered, and crash.
+- `destroy_batch_noadd` never marks the *first* entity of a run as dead or updates its generation:
+  the loop starts at `ptr + 1`. A single `Registry::Destroy` therefore leaves `Deref` returning a
+  live entity while its index is also put on the free list. This is why `Destroy.Basic` fails; fix
+  this before trusting destruction/reuse.
+- `bitecs_entt_destroy_batch` never starts its run counter (`count` stays zero when a run begins), so
+  it destroys nothing; use `bitecs_entt_destroy` per entity until fixed. The wrapper's
+  `DestroyBatch` exposes it.
+- `bitecs_component_define` asserts `meta.typesize > 0`, but the C++ wrapper maps empty
+  trivially-destructible types to `typesize == 0` (tags). Defining a tag aborts in Debug builds
+  (`Entt.Dtors` is the first test to hit it); Release works. Tag support is intended by the rest of
+  the core and needs either the assert relaxed or the wrapper changed.
 - `bitecs_registry_clone_settings` only aliases component lists into the output registry and returns
   `false`; the documented background-loading workflow is unfinished and the aliasing is unsafe.
 - `bitecs_system_run_many` and `bitecs_threadpool_*` are empty stubs; there is no threaded system
   execution yet.
 - `bitecs_entt_create` can leak partially created entities on an allocation failure inside the
-  chunk loop (marked with a TODO).
+  chunk loop (noted inline as `// already created leak here?`).
+
+At the time of writing the checked-in test suite is **not green**: both configurations fail
+`Mask.Remove`; Release additionally fails `Destroy.Basic` and crashes in `Cleanup.Basic`; Debug
+aborts in `Entt.Dtors` on the tag assert. Treat these as the known baseline, not necessarily as
+regressions from your change.
 
 ## Verification checklist
 
 Before reporting work complete:
 
-1. Build in Debug with tests enabled and run `ctest --output-on-failure`.
+1. Build in Debug with tests enabled and run `ctest --output-on-failure`; compare failures against the
+   known baseline above before attributing them to your change.
 2. Build the changed target with the strict warnings from `CMakeLists.txt` (`-Wall -Wextra -pedantic`
    on the core, `/W4` for MSVC) and fix new warnings.
 3. If performance-sensitive code changed, run the relevant `bitecs_bench` filter in a Release build

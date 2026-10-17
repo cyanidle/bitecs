@@ -42,7 +42,6 @@ if (BITECS_BENCH)
     find_package(benchmark REQUIRED)
     find_package(gsl-lite REQUIRED)
     find_package(flecs REQUIRED)
-    find_package(gaia REQUIRED)
     find_package(fastprng REQUIRED)
     find_package(EnTT REQUIRED)
     find_package(entityx REQUIRED)
@@ -52,10 +51,10 @@ if (BITECS_BENCH)
     target_link_libraries(bitecs_bench PRIVATE
         bitecs
         benchmark::benchmark_main
+        benchmark::benchmark
         gsl::gsl-lite
         EnTT::EnTT
         entityx::entityx
-        gaia::gaia
         flecs::flecs_static
         fastprng::fastprng
         ginseng
